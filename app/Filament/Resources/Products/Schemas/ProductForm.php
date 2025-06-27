@@ -64,12 +64,13 @@ class ProductForm
                 ->previewable()
                 ->downloadable(),
 
-            FileUpload::make('pdf_sicurezza')
-                ->label('Scheda Sicurezza (PDF)')
-                ->directory('prodotti/pdf')
-                ->acceptedFileTypes(['application/pdf'])
-                ->openable()
-                ->downloadable(),
+                FileUpload::make('pdf_sicurezza')
+                    ->label('Scheda Sicurezza (PDF)')
+                    ->directory('prodotti/pdf')
+                    ->acceptedFileTypes(['application/pdf'])
+                    ->openable()
+                    ->downloadable(),
+
 
             Placeholder::make('info_listini')
                 ->label('Gestione listini')
