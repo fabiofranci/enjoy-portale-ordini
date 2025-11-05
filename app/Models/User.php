@@ -2,12 +2,12 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 
 class User extends Authenticatable implements FilamentUser
 {
@@ -23,6 +23,7 @@ class User extends Authenticatable implements FilamentUser
         'name',
         'email',
         'password',
+        'cliente_id', // 👈 aggiunto
     ];
 
     /**
@@ -48,9 +49,29 @@ class User extends Authenticatable implements FilamentUser
         ];
     }
 
-    public function canAccessPanel(\Filament\Panel $panel): bool
+    /**
+     * 🔐 Gestione accesso ai vari Filament Panel
+     */
+    public function canAccessPanel(Panel $panel): bool
     {
-        return $this->hasRole('admin');
+        // Pannello admin → solo admin
+        if ($panel->getId() === 'admin') {
+            return $this->hasRole('admin');
+        }
+
+        // Pannello clienti → solo utenti con ruolo cliente
+        if ($panel->getId() === 'clienti') {
+            return $this->hasRole('cliente');
+        }
+
+        return false;
     }
 
+    /**
+     * 🔗 Relazione con Cliente
+     */
+    public function cliente()
+    {
+        return $this->belongsTo(Cliente::class, 'cliente_id');
+    }
 }

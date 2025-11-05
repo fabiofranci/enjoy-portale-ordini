@@ -7,6 +7,8 @@ use Illuminate\Database\Seeder;
 
 use App\Models\Cliente;
 use App\Models\CentroCosto;
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 
 class ClienteSeeder extends Seeder
 {
@@ -15,6 +17,7 @@ class ClienteSeeder extends Seeder
      */
     public function run(): void
     {
+        
         $cliente = Cliente::create([
             'nome' => 'Enjoy Service Srl',
             'partita_iva' => '14418141009',
@@ -22,6 +25,19 @@ class ClienteSeeder extends Seeder
             'telefono' => '029999999',
             'indirizzo' => 'Via Piero della Francesca 4, Rho (MI)',
         ]);
+
+        $cliente = Cliente::where('partita_iva', '14418141009')->first();
+
+        $utenteCliente = User::firstOrCreate(
+            ['email' => 'cliente@enjoy.it'],
+            [
+                'name' => 'Enjoy Referente',
+                'password' => Hash::make('password123'),
+                'cliente_id' => $cliente->id,
+            ]
+        );
+
+        $utenteCliente->assignRole('cliente');
 
         CentroCosto::create([
             'cliente_id' => $cliente->id,

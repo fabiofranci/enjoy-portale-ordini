@@ -5,28 +5,36 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Support\Facades\Auth;
 
 class EnsureClienteRole
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $user = $request->user();
-
-        // ✅ Se siamo sulla pagina di login o password reset, salta il controllo
-        if ($request->is('clienti/login') || $request->is('clienti/logout') || $request->is('clienti/forgot-password')) {
+        // ✅ Evita di bloccare le rotte di login/logout/password reset del pannello clienti
+        if ($request->is('clienti/login*') || $request->is('clienti/logout*') || $request->is('clienti/password-reset*')) {
             return $next($request);
         }
 
-        // Non autenticato → vai al login
+        $user = Auth::user();
+
+        // 🔒 Non autenticato → redirect al login clienti
         if (!$user) {
-            return redirect('/clienti/login');
+            return redirect()->route('filament.clienti.auth.login');
         }
 
-        // Autenticato ma senza ruolo "cliente" → 403
+        // ⚠️ Autenticato ma senza ruolo "cliente"
         if (!$user->hasRole('cliente')) {
-            abort(403, 'Accesso non autorizzato (ruolo cliente richiesto).');
+            // Logout di sicurezza per evitare sessioni miste
+            Auth::logout();
+
+            // Evita loop: reindirizza al login clienti
+            return redirect()
+                ->route('filament.clienti.auth.login')
+                ->withErrors(['email' => 'Accesso riservato ai clienti.']);
         }
 
+        // ✅ Tutto ok → prosegui
         return $next($request);
     }
 }
