@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('Categorie', function (Blueprint $table) {
             $table->id();
             $table->string('nome');
+            $table->decimal('percentuale_ricarico', 5, 2)->default(0);
             $table->foreignId('categoria_padre_id')->nullable()->constrained('Categorie')->nullOnDelete();
             $table->timestamps();
         });

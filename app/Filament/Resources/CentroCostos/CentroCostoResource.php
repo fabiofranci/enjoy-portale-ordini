@@ -18,6 +18,12 @@ class CentroCostoResource extends Resource
 {
     protected static ?string $model = CentroCosto::class;
 
+    protected static ?string $navigationLabel = 'Centri di costo';
+
+    protected static ?string $pluralModelLabel = 'Centri di costo';
+
+    protected static ?string $modelLabel = 'Centro di costo';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     public static function form(Schema $schema): Schema

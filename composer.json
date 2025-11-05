@@ -10,6 +10,7 @@
         "filament/filament": "^4.0@beta",
         "laravel/framework": "^12.0",
         "laravel/tinker": "^2.10.1",
+        "phpoffice/phpspreadsheet": "*",
         "spatie/laravel-permission": "^6.20"
     },
     "require-dev": {

@@ -19,12 +19,12 @@ class ProductsTable
     {
         return $table
         ->columns([
-            ImageColumn::make('immagine')
-                ->label('Immagine')
-                ->disk('public')
-                ->height(40)
-                ->circular()
-                ->toggleable(),
+        ImageColumn::make('immagine')
+            ->label('Immagine')
+            ->disk('public')
+            ->height(40)
+            ->toggleable()
+            ->defaultImageUrl(url('/images/placeholder.png')), // immagine di fallback
 
             TextColumn::make('nome')->label('Nome')->searchable(),
             TextColumn::make('codice')->label('Codice')->searchable(),

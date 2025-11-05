@@ -10,7 +10,7 @@ class Categoria extends Model
 {
     protected $table = 'Categorie';
 
-    protected $fillable = ['nome', 'categoria_padre_id'];
+    protected $fillable = ['nome', 'codice', 'percentuale_ricarico', 'categoria_padre_id'];
 
     public function padre(): BelongsTo
     {
