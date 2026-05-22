@@ -23,6 +23,14 @@ class Product extends Model
         'immagine',
         'pdf_sicurezza',
         'disponibile',
+        'odoo_id',
+        'odoo_write_date',
+    ];
+
+    protected $casts = [
+        'odoo_id' => 'integer',
+        'odoo_write_date' => 'datetime',
+        'disponibile' => 'boolean',
     ];
 
     public function categoria(): BelongsTo

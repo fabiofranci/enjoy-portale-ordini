@@ -19,6 +19,14 @@ class Listino extends Model
         'sconto_percentuale',
         'valido_dal',
         'valido_al',
+        'odoo_id',
+        'odoo_write_date',
+        'attivo',
+        'sequenza',
+        'odoo_currency_id',
+        'odoo_currency_name',
+        'odoo_company_id',
+        'odoo_company_name',
     ];
 
     public function fornitore()
@@ -29,6 +37,12 @@ class Listino extends Model
     protected $casts = [
         'valido_dal' => 'date',
         'valido_al'  => 'date',
+        'odoo_id' => 'integer',
+        'odoo_write_date' => 'datetime',
+        'attivo' => 'boolean',
+        'sequenza' => 'integer',
+        'odoo_currency_id' => 'integer',
+        'odoo_company_id' => 'integer',
     ];
 
     public function centroCosto(): BelongsTo
@@ -46,5 +60,10 @@ class Listino extends Model
         return $this->belongsToMany(Product::class, 'listino_prodotto', 'listino_id', 'product_id')
             ->withPivot(['prezzo_lordo', 'sconto_percentuale', 'prezzo', 'iva_percentuale'])
             ->withTimestamps();
+    }
+
+    public function odooItems()
+    {
+        return $this->hasMany(ListinoItem::class, 'listino_id');
     }
 }

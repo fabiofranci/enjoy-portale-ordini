@@ -26,7 +26,7 @@ Artisan::command('odoo:test-connection {--model= : Optional Odoo model to valida
 
         return 1;
     }
-});
+})->purpose('Test connection to Odoo and optionally validate a model');
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
