@@ -27,7 +27,7 @@ class ViewOrdine extends ViewRecord
                     Text::make('user.name')->label('Cliente'),
                     Text::make('centroCosto.nome')->label('Centro di costo'),
                     Text::make('riferimento_cliente')
-                        ->label('Riferimento cliente')
+                        ->label('Conferma ordine')
                         ->placeholder('-'),
                 ]),
 

@@ -42,6 +42,13 @@ return [
         'password' => env('ODOO_PASSWORD'),
         'api_key' => env('ODOO_API_KEY'),
         'timeout' => env('ODOO_TIMEOUT', 15),
+        'quote_request_team_id' => env('ODOO_QUOTE_REQUEST_TEAM_ID'),
+        'quote_request_user_id' => env('ODOO_QUOTE_REQUEST_USER_ID'),
+    ],
+
+    'igroup' => [
+        'quote_request_to' => env('IGROUP_QUOTE_REQUEST_TO'),
+        'quote_request_cc' => env('IGROUP_QUOTE_REQUEST_CC'),
     ],
 
 ];

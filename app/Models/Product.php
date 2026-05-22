@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\PrezziService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -77,9 +78,7 @@ public function getPrezzoListinoBase(): ?float
      */
     public function prezzoPerListino(int $listinoId): ?float
     {
-        return $this->listini
-            ->firstWhere('listino_id', $listinoId)
-            ?->prezzo;
+        return PrezziService::prezzoPerListino($this, $listinoId);
     }
 
     /**
@@ -87,38 +86,7 @@ public function getPrezzoListinoBase(): ?float
      */
     public function getPrezzoAttivo(): ?float
     {
-        if ($this->relationLoaded('listini')) {
-            $listino = $this->listini->firstWhere('id', 1);
-            if ($listino?->pivot?->prezzo !== null) {
-                return (float) $listino->pivot->prezzo;
-            }
-
-            $fallbackListino = $this->listini->first();
-            if ($fallbackListino?->pivot?->prezzo !== null) {
-                return (float) $fallbackListino->pivot->prezzo;
-            }
-        }
-
-        $prezzo = $this->listini()
-            ->wherePivot('listino_id', 1)
-            ->value('listino_prodotto.prezzo');
-
-        if ($prezzo !== null) {
-            return (float) $prezzo;
-        }
-
-        $prezzo = $this->listini()
-            ->value('listino_prodotto.prezzo');
-
-        if ($prezzo !== null) {
-            return (float) $prezzo;
-        }
-
-        if (isset($this->prezzo_listino_ufficiale)) {
-            return (float) $this->prezzo_listino_ufficiale;
-        }
-
-        return $this->getPrezzoListinoBase();
+        return PrezziService::prezzoAttivo($this);
     }
 
     public function packagings(): HasMany

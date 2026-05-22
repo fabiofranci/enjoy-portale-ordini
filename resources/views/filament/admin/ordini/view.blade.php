@@ -19,7 +19,7 @@
                 <div>
                     <div class="text-gray-500">Cliente</div>
                     <div class="font-medium">
-                        {{ $record->user->name ?? '-' }}
+                        {{ $record->user?->name ?? '-' }}
                     </div>
                 </div>
 
@@ -27,6 +27,13 @@
                     <div class="text-gray-500">Centro di costo</div>
                     <div class="font-medium">
                         {{ $record->centroCosto->nome ?? '-' }}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-gray-500">Conferma ordine</div>
+                    <div class="font-medium">
+                        {{ $record->riferimento_cliente ?: '-' }}
                     </div>
                 </div>
 
@@ -59,6 +66,7 @@
                 <thead class="border-b text-gray-500">
                     <tr>
                         <th class="text-left py-2">Prodotto</th>
+                        <th class="text-center py-2">UDM</th>
                         <th class="text-center py-2">Q.tà</th>
                         <th class="text-right py-2">Prezzo</th>
                         <th class="text-right py-2">Netto</th>
@@ -70,7 +78,10 @@
                     @foreach ($record->items as $item)
                         <tr>
                             <td class="py-2">
-                                {{ $item->prodotto->nome ?? '—' }}
+                                {{ $item->prodotto?->nome ?? '—' }}
+                            </td>
+                            <td class="text-center py-2">
+                                {{ $item->unita ?? $item->prodotto?->unita_misura ?? 'NR' }}
                             </td>
                             <td class="text-center py-2">
                                 {{ $item->quantita }}

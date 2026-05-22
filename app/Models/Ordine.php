@@ -12,6 +12,17 @@ class Ordine extends Model
     protected $fillable = [
         'user_id','centro_costo_id','stato','riferimento_cliente','note','extra_budget',
         'totale_lordo','totale_netto','iva_totale','pdf_path',
+        'odoo_lead_id','igroup_sent_at','odoo_synced_at',
+    ];
+
+    protected $casts = [
+        'extra_budget' => 'boolean',
+        'totale_lordo' => 'decimal:2',
+        'totale_netto' => 'decimal:2',
+        'iva_totale' => 'decimal:2',
+        'odoo_lead_id' => 'integer',
+        'igroup_sent_at' => 'datetime',
+        'odoo_synced_at' => 'datetime',
     ];
 
     public function items(): HasMany

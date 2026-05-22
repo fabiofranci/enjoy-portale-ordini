@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Models\Ordine;
 use App\Models\OrdineItem;
-use App\Models\Prodotto;
+use App\Models\Product;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -27,7 +27,7 @@ class CartService
     public static function addProduct(User $user, int $productId, int $qty = 1): Ordine
     {
         $ordine = self::getDraftFor($user);
-        $product = Prodotto::findOrFail($productId);
+        $product = Product::findOrFail($productId);
 
         $pricing = PrezziService::prezzoVisibile($product, $user);
 

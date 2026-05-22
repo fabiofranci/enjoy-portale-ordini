@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Listino extends Model
 {
@@ -55,6 +56,11 @@ class Listino extends Model
         return $this->belongsTo(Categoria::class, 'categoria_id');
     }
 
+    public function centriCosto(): BelongsToMany
+    {
+        return $this->belongsToMany(CentroCosto::class, 'centro_costo_listino')->withTimestamps();
+    }
+
     public function products(): BelongsToMany
     {
         return $this->belongsToMany(Product::class, 'listino_prodotto', 'listino_id', 'product_id')
@@ -62,7 +68,7 @@ class Listino extends Model
             ->withTimestamps();
     }
 
-    public function odooItems()
+    public function odooItems(): HasMany
     {
         return $this->hasMany(ListinoItem::class, 'listino_id');
     }

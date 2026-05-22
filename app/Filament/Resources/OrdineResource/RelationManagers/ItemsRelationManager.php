@@ -24,6 +24,10 @@ class ItemsRelationManager extends RelationManager
                     ->label('Q.tà')
                     ->alignCenter(),
 
+                TextColumn::make('unita')
+                    ->label('UDM')
+                    ->alignCenter(),
+
                 TextColumn::make('prezzo_unitario_lordo')
                     ->label('Prezzo unitario')
                     ->money('EUR'),

@@ -12,6 +12,7 @@ use App\Filament\Resources\Listinos\Pages\EditListino;
 use App\Filament\Resources\Listinos\Pages\ListListinos;
 use App\Filament\Resources\Listinos\Pages\ViewListino;
 use Filament\Schemas\Schema;
+use App\Filament\Resources\Listinos\RelationManagers\ListinoItemsRelationManager;
 use App\Filament\Resources\Listinos\RelationManagers\ProductsRelationManager;
 
 
@@ -33,6 +34,7 @@ class ListinoResource extends Resource
     {
         return [
             ProductsRelationManager::class,
+            ListinoItemsRelationManager::class,
         ];
     }
 

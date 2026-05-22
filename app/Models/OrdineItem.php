@@ -9,14 +9,14 @@ class OrdineItem extends Model
     protected $table = 'ordine_items';
 
     protected $fillable = [
-        'ordine_id','prodotto_id','quantita',
+        'ordine_id','prodotto_id','unita','quantita',
         'prezzo_unitario_lordo','sconto_percentuale','iva_percentuale',
         'totale_riga_netto','totale_riga_iva','totale_riga_lordo',
     ];
 
     public function prodotto()
     {
-        return $this->belongsTo(Product::class, 'prodotto_id');
+        return $this->belongsTo(Product::class, 'prodotto_id')->withTrashed();
     }
 
     public function calcolaTotali(): void

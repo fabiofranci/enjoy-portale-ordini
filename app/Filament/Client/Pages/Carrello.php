@@ -2,14 +2,17 @@
 
 namespace App\Filament\Client\Pages;
 
+use App\Models\User;
+use App\Services\Orders\OrderSubmissionService;
+use BackedEnum;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
-use Illuminate\Support\Facades\Session;
-use BackedEnum;
-use App\Models\Ordine;
-use App\Models\OrdineItem;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Session;
+use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class Carrello extends Page
 {
@@ -22,6 +25,7 @@ class Carrello extends Page
 
     public array $cart = [];
     public float $totale = 0;
+    public string $confirmationNumber = '';
 
     public function mount(): void
     {
@@ -70,6 +74,7 @@ class Carrello extends Page
         $this->cart = [];
         Session::forget('cart');
         $this->totale = 0;
+        $this->confirmationNumber = '';
     }
 
     // 🔹 badge nel menu (rimane perfetto così)
@@ -84,58 +89,76 @@ class Carrello extends Page
         return 'primary';
     }
 
-public function proceed(): void
-{
-    if (empty($this->cart)) {
-        return;
-    }
+    public function proceed(): void
+    {
+        if (empty($this->cart)) {
+            Notification::make()
+                ->title('Il carrello e\' vuoto')
+                ->warning()
+                ->send();
 
-    DB::transaction(function () {
-
-        // 🔹 1. crea ordine (testata)
-        $ordine = Ordine::create([
-            'user_id'             => Auth::id(),
-            'centro_costo_id'     => Auth::user()->centro_costo_id ?? null,
-            'stato'               => 'inviato',
-            'riferimento_cliente' => null,
-            'note'                => null,
-            'extra_budget'        => false,
-            'totale_lordo'        => 0,
-            'totale_netto'        => 0,
-            'iva_totale'          => 0,
-        ]);
-
-        // 🔹 2. crea righe ordine
-        foreach ($this->cart as $item) {
-
-            $prezzoLordo = $item['prezzo_unitario']
-                ?? $item['prezzo_unitario_lordo']
-                ?? 0;
-
-            $riga = new OrdineItem([
-                'prodotto_id'           => $item['prodotto_id'] ?? null,
-                'quantita'              => $item['quantita'],
-                'prezzo_unitario_lordo' => $prezzoLordo,
-                'sconto_percentuale'    => $item['sconto_percentuale'] ?? 0,
-                'iva_percentuale'       => $item['iva_percentuale'] ?? 22,
-            ]);
-
-            $riga->ordine_id = $ordine->id;
-            $riga->calcolaTotali();
-            $riga->save();
+            return;
         }
 
-        // 🔹 3. ricalcola totali ordine
-        $ordine->load('items');
-        $ordine->ricalcolaTotali();
+        $this->validate([
+            'confirmationNumber' => ['required', 'regex:/^[0-9]+$/', 'max:50'],
+        ], [
+            'confirmationNumber.required' => 'Inserisci il numero di conferma ordine.',
+            'confirmationNumber.regex' => 'Il numero di conferma ordine deve contenere solo cifre.',
+            'confirmationNumber.max' => 'Il numero di conferma ordine e\' troppo lungo.',
+        ]);
 
-        // 🔹 4. svuota carrello
-        session()->forget('cart');
-    });
+        $user = Auth::user();
 
-    // reset stato Livewire
-    $this->cart = [];
-    $this->totale = 0;
-}
+        if (!$user instanceof User) {
+            Notification::make()
+                ->title('Sessione non valida')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        try {
+            $ordine = app(OrderSubmissionService::class)->submit($user, $this->cart, $this->confirmationNumber);
+
+            session()->forget('cart');
+            $this->cart = [];
+            $this->totale = 0;
+            $this->confirmationNumber = '';
+
+            Notification::make()
+                ->title('Ordine inviato')
+                ->body(sprintf(
+                    'Ordine #%d inviato a iGroup e registrato su Odoo come richiesta di preventivo.',
+                    $ordine->id
+                ))
+                ->success()
+                ->send();
+        } catch (ValidationException $exception) {
+            $message = collect($exception->errors())
+                ->flatten()
+                ->first() ?? 'I dati inseriti non sono validi.';
+
+            Notification::make()
+                ->title('Invio non completato')
+                ->body((string) $message)
+                ->danger()
+                ->send();
+        } catch (Throwable $exception) {
+            Log::error('Cart order submission failed', [
+                'user_id' => $user->id,
+                'confirmation_number' => $this->confirmationNumber,
+                'exception' => $exception,
+            ]);
+
+            Notification::make()
+                ->title('Invio non completato')
+                ->body('L\'ordine e\' stato salvato solo parzialmente o richiede un nuovo tentativo. Riprova con lo stesso numero di conferma oppure contatta l\'assistenza.')
+                ->danger()
+                ->persistent()
+                ->send();
+        }
+    }
 
 }
