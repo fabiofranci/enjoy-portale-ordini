@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    'odoo' => [
+        'url' => env('ODOO_URL'),
+        'database' => env('ODOO_DATABASE'),
+        'username' => env('ODOO_USERNAME'),
+        'password' => env('ODOO_PASSWORD'),
+        'api_key' => env('ODOO_API_KEY'),
+        'timeout' => env('ODOO_TIMEOUT', 15),
+    ],
+
 ];
