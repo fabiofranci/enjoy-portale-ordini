@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use Illuminate\Support\Facades\Route;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -10,8 +11,6 @@ use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
-use Filament\Widgets\AccountWidget;
-use Filament\Widgets\FilamentInfoWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -19,6 +18,13 @@ use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use App\Http\Middleware\EnsureClienteRole; // ✅
+use App\Http\Controllers\Client\CartController;
+use Filament\Navigation\NavigationBuilder;
+use Filament\Navigation\NavigationGroup;
+use Filament\Navigation\NavigationItem;
+use App\Filament\Client\Resources\Prodotti\ProdottoResource;
+use App\Models\Categoria;
+use App\Filament\Client\Pages\Carrello;
 
 class ClientPanelProvider extends PanelProvider
 {
@@ -30,18 +36,60 @@ class ClientPanelProvider extends PanelProvider
             ->login() // genera /clienti/login /clienti/logout ecc.
             ->brandName('Portale Clienti Enjoy')
             ->colors([
-                'primary' => Color::Amber,
+                'primary' => Color::Blue,
             ])
-            ->discoverResources(in: app_path('Filament/ClientPanel/Resources'), for: 'App\\Filament\\ClientPanel\\Resources')
-            ->discoverPages(in: app_path('Filament/ClientPanel/Pages'), for: 'App\\Filament\\ClientPanel\\Pages')
+->navigation(function (NavigationBuilder $builder): NavigationBuilder {
+    return $builder->groups([
+        // 🏠 Dashboard + Carrello
+        NavigationGroup::make()
+            ->label('Navigazione')
+            ->items([
+                NavigationItem::make()
+                    ->label('Dashboard')
+                    ->icon('heroicon-o-home')
+                    ->url(Dashboard::getUrl()),
+
+                NavigationItem::make()
+                    ->label('Carrello')
+                    ->icon('heroicon-o-shopping-cart')
+                    ->url(Carrello::getUrl()),
+            ]),
+
+        // 📦 Catalogo dinamico
+        NavigationGroup::make()
+            ->label('Catalogo')
+            ->items(array_merge(
+                [
+                    NavigationItem::make()
+                        ->label('Tutti i prodotti')
+                        ->icon('heroicon-o-rectangle-stack')
+                        ->url(ProdottoResource::getUrl('index')),
+                ],
+                Categoria::whereNull('categoria_padre_id')
+                    ->orderBy('nome')
+                    ->get()
+                    ->map(function ($categoria) {
+                        return NavigationItem::make()
+                            ->label($categoria->nome)
+                            ->icon('heroicon-o-tag')
+                            ->url(ProdottoResource::getUrl('index', [
+                                'categoria' => $categoria->id,
+                            ]));
+                    })
+                    ->toArray()
+            )),
+    ]);
+})
+            ->discoverResources(in: app_path('Filament/Client/Resources'), for: 'App\\Filament\\Client\\Resources')
+            ->resources([
+                \App\Filament\Client\Resources\Prodotti\ProdottoResource::class,
+            ])
+            ->discoverPages(in: app_path('Filament/Client/Pages'), for: 'App\\Filament\\Client\\Pages')
             ->pages([
                 Dashboard::class,
             ])
-            ->discoverWidgets(in: app_path('Filament/ClientPanel/Widgets'), for: 'App\\Filament\\ClientPanel\\Widgets')
-            ->widgets([
-                AccountWidget::class,
-                FilamentInfoWidget::class,
-            ])
+            ->discoverWidgets(in: app_path('Filament/Client/Widgets'), for: 'App\\Filament\\Client\\Widgets')
+            ->widgets([])
             // ordine middleware consigliato per Filament v4
             ->middleware([
                 EncryptCookies::class,
@@ -58,6 +106,21 @@ class ClientPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class, // ✅ forza autenticazione
-            ]);
+            ])
+            ->routes(function () {
+                Route::post('/carrello/update', [\App\Http\Controllers\Client\CartController::class, 'update'])
+                    ->name('pages.carrello.update');
+
+                Route::get('/carrello/add/{prodotto}', [CartController::class, 'add'])
+                    ->name('pages.carrello.add');
+
+                Route::get('/carrello/remove/{id}', [CartController::class, 'remove'])
+                    ->name('pages.carrello.remove');
+
+                Route::post('/carrello/checkout', [CartController::class, 'checkout'])
+                    ->name('pages.carrello.checkout');
+            });
+
+
     }
 }

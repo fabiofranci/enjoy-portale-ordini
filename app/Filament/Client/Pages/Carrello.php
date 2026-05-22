@@ -2,85 +2,140 @@
 
 namespace App\Filament\Client\Pages;
 
-use App\Models\OrdineItem;
-use App\Services\CartService;
-use Filament\Forms;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Filament\Schemas\Schema;
-use Filament\Tables;
-use Filament\Tables\Table;
-use Filament\Tables\Actions\Action;
+use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Facades\Session;
+use BackedEnum;
+use App\Models\Ordine;
+use App\Models\OrdineItem;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
-class Carrello extends Page implements Tables\Contracts\HasTable
+class Carrello extends Page
 {
-    use Tables\Concerns\InteractsWithTable;
-
-    protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShoppingCart;
     protected static ?string $navigationLabel = 'Carrello';
-    protected static string $view = 'filament.client.pages.carrello';
+    protected static ?string $title = 'Il tuo carrello';
     protected static ?string $slug = 'carrello';
 
-    public function getHeading(): string
+    protected string $view = 'filament.client.carrello.index';
+
+    public array $cart = [];
+    public float $totale = 0;
+
+    public function mount(): void
     {
-        $ordine = CartService::getDraftFor(auth()->user());
-        return "Carrello – Totale: " . number_format($ordine->totale_lordo, 2, ',', '.') . " €";
+        $this->loadCart();
     }
 
-    public function table(Table $table): Table
+    protected function loadCart(): void
     {
-        $ordine = CartService::getDraftFor(auth()->user());
-
-        return $table
-            ->query(fn () => $ordine->items()->getQuery()->with('product'))
-            ->columns([
-                Tables\Columns\TextColumn::make('product.nome')->label('Prodotto')->searchable(),
-                Tables\Columns\TextColumn::make('prezzo_unitario_lordo')->label('Prezzo')->money('eur', true),
-                Tables\Columns\TextColumn::make('sconto_percentuale')->label('Sconto %'),
-                Tables\Columns\TextColumn::make('iva_percentuale')->label('IVA %'),
-                Tables\Columns\TextColumn::make('quantita')->label('Q.tà'),
-                Tables\Columns\TextColumn::make('totale_riga_lordo')->label('Totale')->money('eur', true),
-            ])
-            ->actions([
-                Action::make('qty')
-                    ->label('Modifica Q.tà')
-                    ->icon('heroicon-o-pencil-square')
-                    ->form([
-                        Forms\Components\TextInput::make('quantita')->numeric()->minValue(1)->required(),
-                    ])
-                    ->mountUsing(fn (OrdineItem $record, Forms\Form $form) => $form->fill(['quantita' => $record->quantita]))
-                    ->action(function (OrdineItem $record, array $data) {
-                        CartService::updateQty(auth()->user(), $record->product_id, (int) $data['quantita']);
-                        Notification::make()->success()->title('Quantità aggiornata')->send();
-                        $this->dispatch('$refresh');
-                    }),
-                Action::make('remove')
-                    ->label('Rimuovi')
-                    ->icon('heroicon-o-trash')
-                    ->color('danger')
-                    ->requiresConfirmation()
-                    ->action(function (OrdineItem $record) {
-                        CartService::removeProduct(auth()->user(), $record->product_id);
-                        Notification::make()->success()->title('Riga rimossa')->send();
-                        $this->dispatch('$refresh');
-                    }),
-            ])
-            ->headerActions([
-                Action::make('svuota')
-                    ->label('Svuota carrello')
-                    ->icon('heroicon-o-x-circle')
-                    ->color('warning')
-                    ->requiresConfirmation()
-                    ->action(function () {
-                        CartService::empty(auth()->user());
-                        Notification::make()->title('Carrello svuotato')->success()->send();
-                        $this->dispatch('$refresh');
-                    }),
-                Action::make('checkout')
-                    ->label('Procedi all\'invio')
-                    ->icon('heroicon-o-paper-airplane')
-                    ->url(fn () => static::getUrl('checkout')), // vedi pagina Checkout qui sotto
-            ])
-            ->paginated(false);
+        $this->cart = Session::get('cart', []);
+        $this->totale = collect($this->cart)->sum(
+            fn ($item) => $item['prezzo_unitario'] * $item['quantita']
+        );
     }
+
+    protected function sync(): void
+    {
+        Session::put('cart', $this->cart);
+        $this->loadCart();
+    }
+
+    public function increment(string $key): void
+    {
+        $this->cart[$key]['quantita']++;
+        $this->sync();
+    }
+
+    public function decrement(string $key): void
+    {
+        $this->cart[$key]['quantita']--;
+
+        if ($this->cart[$key]['quantita'] <= 0) {
+            unset($this->cart[$key]);
+        }
+
+        $this->sync();
+    }
+
+    public function remove(string $key): void
+    {
+        unset($this->cart[$key]);
+        $this->sync();
+    }
+
+    public function clear(): void
+    {
+        $this->cart = [];
+        Session::forget('cart');
+        $this->totale = 0;
+    }
+
+    // 🔹 badge nel menu (rimane perfetto così)
+    public static function getNavigationBadge(): ?string
+    {
+        $cart = Session::get('cart', []);
+        return count($cart) > 0 ? (string) count($cart) : null;
+    }
+
+    public static function getNavigationBadgeColor(): string|array|null
+    {
+        return 'primary';
+    }
+
+public function proceed(): void
+{
+    if (empty($this->cart)) {
+        return;
+    }
+
+    DB::transaction(function () {
+
+        // 🔹 1. crea ordine (testata)
+        $ordine = Ordine::create([
+            'user_id'             => Auth::id(),
+            'centro_costo_id'     => Auth::user()->centro_costo_id ?? null,
+            'stato'               => 'inviato',
+            'riferimento_cliente' => null,
+            'note'                => null,
+            'extra_budget'        => false,
+            'totale_lordo'        => 0,
+            'totale_netto'        => 0,
+            'iva_totale'          => 0,
+        ]);
+
+        // 🔹 2. crea righe ordine
+        foreach ($this->cart as $item) {
+
+            $prezzoLordo = $item['prezzo_unitario']
+                ?? $item['prezzo_unitario_lordo']
+                ?? 0;
+
+            $riga = new OrdineItem([
+                'prodotto_id'           => $item['prodotto_id'] ?? null,
+                'quantita'              => $item['quantita'],
+                'prezzo_unitario_lordo' => $prezzoLordo,
+                'sconto_percentuale'    => $item['sconto_percentuale'] ?? 0,
+                'iva_percentuale'       => $item['iva_percentuale'] ?? 22,
+            ]);
+
+            $riga->ordine_id = $ordine->id;
+            $riga->calcolaTotali();
+            $riga->save();
+        }
+
+        // 🔹 3. ricalcola totali ordine
+        $ordine->load('items');
+        $ordine->ricalcolaTotali();
+
+        // 🔹 4. svuota carrello
+        session()->forget('cart');
+    });
+
+    // reset stato Livewire
+    $this->cart = [];
+    $this->totale = 0;
+}
+
 }

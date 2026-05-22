@@ -36,4 +36,15 @@ class Ordine extends Model
             'totale_lordo' => $lordo,
         ]);
     }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function centroCosto()
+    {
+        return $this->belongsTo(CentroCosto::class);
+    }
+
 }

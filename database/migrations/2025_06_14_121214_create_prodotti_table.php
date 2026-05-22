@@ -14,7 +14,6 @@ return new class extends Migration
             $table->string('codice')->unique();
             $table->foreignId('categoria_id')->constrained('Categorie')->cascadeOnDelete();
             $table->string('unita_misura')->nullable();
-            $table->string('packaging')->nullable(); // 👈 senza after
             $table->decimal('prezzo_acquisto', 10, 2)->nullable(); // 👈 senza after
             $table->decimal('prezzo_listino', 10, 2)->nullable();
             $table->text('descrizione')->nullable();

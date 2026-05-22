@@ -14,6 +14,11 @@ class OrdineItem extends Model
         'totale_riga_netto','totale_riga_iva','totale_riga_lordo',
     ];
 
+    public function prodotto()
+    {
+        return $this->belongsTo(Product::class, 'prodotto_id');
+    }
+
     public function calcolaTotali(): void
     {
         $prezzoScontato = $this->prezzo_unitario_lordo * (1 - ($this->sconto_percentuale / 100));

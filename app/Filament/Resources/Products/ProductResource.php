@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Filament\Resources\Products;
-
+use App\Filament\Resources\ProductResource\RelationManagers\ProductPackagingRelationManager;
 use App\Filament\Resources\Products\Pages\CreateProduct;
 use App\Filament\Resources\Products\Pages\EditProduct;
 use App\Filament\Resources\Products\Pages\ListProducts;
@@ -38,13 +38,6 @@ class ProductResource extends Resource
         return ProductsTable::configure($table);
     }
 
-    public static function getRelations(): array
-    {
-        return [
-            //
-        ];
-    }
-
     public static function getPages(): array
     {
         return [
@@ -61,4 +54,12 @@ class ProductResource extends Resource
                 SoftDeletingScope::class,
             ]);
     }
+
+    public static function getRelations(): array
+    {
+        return [
+            ProductPackagingRelationManager::class,
+        ];
+    }
+    
 }

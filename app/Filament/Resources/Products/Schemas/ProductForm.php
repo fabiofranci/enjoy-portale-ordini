@@ -8,14 +8,15 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
-use Filament\Schemas\Schema;
 use Filament\Forms\Components\Placeholder;
+use Filament\Schemas\Schema;
 
 class ProductForm
 {
     public static function configure(Schema $schema): Schema
     {
         return $schema->components([
+
             TextInput::make('nome')
                 ->label('Nome prodotto')
                 ->required(),
@@ -48,33 +49,43 @@ class ProductForm
                 ->required(),
 
             TextInput::make('unita_misura')
-                ->label('Unità di misura'),
+                ->label('Unità di misura')
+                ->required(),
+
+            TextInput::make('prezzo_listino_base')
+                ->label('Prezzo listino base (€)')
+                ->numeric()
+                ->step(0.01)
+                ->prefix('€')
+                ->dehydrated(false), // ⬅️ FONDAMENTALE
 
             Toggle::make('disponibile')
                 ->label('Disponibile'),
 
             Textarea::make('descrizione')
-                ->label('Descrizione'),
+                ->label('Descrizione')
+                ->columnSpanFull(),
 
             FileUpload::make('immagine')
                 ->label('Immagine')
                 ->directory('prodotti/immagini')
+                ->disk('public')
                 ->image()
                 ->imageEditor()
                 ->previewable()
                 ->downloadable(),
 
-                FileUpload::make('pdf_sicurezza')
-                    ->label('Scheda Sicurezza (PDF)')
-                    ->directory('prodotti/pdf')
-                    ->acceptedFileTypes(['application/pdf'])
-                    ->openable()
-                    ->downloadable(),
-
+            FileUpload::make('pdf_sicurezza')
+                ->label('Scheda Sicurezza (PDF)')
+                ->directory('prodotti/pdf')
+                ->acceptedFileTypes(['application/pdf'])
+                ->disk('public')
+                ->openable()
+                ->downloadable(),
 
             Placeholder::make('info_listini')
                 ->label('Gestione listini')
-                ->content('I listini associati a questo prodotto sono gestiti nella sezione dedicata in basso.')
+                ->content('Il prezzo del listino base viene salvato automaticamente. Gli altri listini sono gestiti nella sezione dedicata.')
                 ->columnSpanFull(),
 
         ]);
