@@ -53,12 +53,22 @@ class PrezziService
             'prezzo_lordo'       => $pricing['prezzo_lordo'] ?? 0.0,
             'sconto_percentuale' => $pricing['sconto_percentuale'] ?? 0.0,
             'iva_percentuale'    => $pricing['iva_percentuale'] ?? self::DEFAULT_IVA_PERCENTUALE,
+            'ordinabile'         => (bool) ($pricing['ordinabile'] ?? false),
+            'motivo_non_ordinabile' => $pricing['motivo_non_ordinabile'] ?? null,
+            'source'             => $pricing['source'] ?? null,
+            'listino_id'         => $pricing['listino_id'] ?? null,
         ];
     }
 
     public static function prezzoAttivo(Product $product, ?User $user = null, float $quantity = self::DEFAULT_QUANTITY): ?float
     {
-        return self::resolvePricing($product, $user ?? auth()->user(), $quantity)['prezzo'] ?? null;
+        $pricing = self::resolvePricing($product, $user ?? auth()->user(), $quantity);
+
+        if (($pricing['ordinabile'] ?? false) !== true) {
+            return null;
+        }
+
+        return $pricing['prezzo'] ?? null;
     }
 
     public static function prezzoPerListino(Product $product, int $listinoId, float $quantity = self::DEFAULT_QUANTITY): ?float
@@ -70,6 +80,14 @@ class PrezziService
         }
 
         return self::resolvePricingForListino($product, $listino, $quantity)['prezzo'] ?? null;
+    }
+
+    public static function clearCaches(): void
+    {
+        self::$pricingCache = [];
+        self::$applicablePricelistsCache = [];
+        self::$categoryTreeCache = [];
+        self::$hasCentroCostoListinoTable = null;
     }
 
     /**
@@ -108,6 +126,8 @@ class PrezziService
                 'prezzo_lordo' => round($basePrice, 2),
                 'sconto_percentuale' => 0.0,
                 'iva_percentuale' => self::DEFAULT_IVA_PERCENTUALE,
+                'ordinabile' => true,
+                'motivo_non_ordinabile' => null,
                 'source' => 'fallback_base_listino',
                 'listino_id' => null,
                 'rule_id' => null,
@@ -204,7 +224,7 @@ class PrezziService
             return null;
         }
 
-        $centroCostoId = $user->centro_costo_default_id ?? null;
+        $centroCostoId = $user->centro_costo_default_id ?? $user->centro_costo_id ?? null;
 
         if (is_numeric($centroCostoId) && (int) $centroCostoId > 0) {
             return (int) $centroCostoId;
@@ -294,6 +314,8 @@ class PrezziService
             'prezzo_lordo' => $price,
             'sconto_percentuale' => 0.0,
             'iva_percentuale' => self::DEFAULT_IVA_PERCENTUALE,
+            'ordinabile' => true,
+            'motivo_non_ordinabile' => null,
             'source' => 'odoo_pricelist_item',
             'listino_id' => $listino->id,
             'rule_id' => $rule->id,
@@ -387,10 +409,26 @@ class PrezziService
             ? $product->listini->firstWhere('id', $listino->id)
             : $product->listini()->where('Listini.id', $listino->id)->first();
 
-        $price = $record?->pivot?->prezzo;
-
-        if ($price === null) {
+        if ($record === null) {
             return null;
+        }
+
+        $price = $record->pivot->prezzo;
+        $ordinabile = $record->pivot->ordinabile;
+        $ordinabile = $ordinabile === null ? true : (bool) $ordinabile;
+
+        if (!$ordinabile || $price === null || (float) $price <= 0.0) {
+            return [
+                'prezzo' => null,
+                'prezzo_lordo' => null,
+                'sconto_percentuale' => (float) ($record->pivot->sconto_percentuale ?? 0),
+                'iva_percentuale' => (float) ($record->pivot->iva_percentuale ?? self::DEFAULT_IVA_PERCENTUALE),
+                'ordinabile' => false,
+                'motivo_non_ordinabile' => $record->pivot->motivo_non_ordinabile ?? 'prezzo_non_disponibile',
+                'source' => 'legacy_pivot',
+                'listino_id' => $listino->id,
+                'rule_id' => null,
+            ];
         }
 
         return [
@@ -398,6 +436,8 @@ class PrezziService
             'prezzo_lordo' => round((float) ($record->pivot->prezzo_lordo ?? $price), 2),
             'sconto_percentuale' => (float) ($record->pivot->sconto_percentuale ?? 0),
             'iva_percentuale' => (float) ($record->pivot->iva_percentuale ?? self::DEFAULT_IVA_PERCENTUALE),
+            'ordinabile' => true,
+            'motivo_non_ordinabile' => null,
             'source' => 'legacy_pivot',
             'listino_id' => $listino->id,
             'rule_id' => null,

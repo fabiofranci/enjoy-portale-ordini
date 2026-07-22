@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Client;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Models\Product;
+use App\Services\PrezziService;
 use Illuminate\Http\Request;
 
 class CartController extends Controller
@@ -31,18 +33,21 @@ class CartController extends Controller
         $cart = session()->get('cart', []);
 
         // Unità selezionata (fallback = unità base del prodotto)
-        $unita = $request->input('unita', $prodotto->unita_misura);
+        $unita = trim((string) $request->input('unita', $prodotto->unita_misura ?? 'NR'));
+        $unita = $unita !== '' ? $unita : 'NR';
 
-        // Prezzo base dal listino attivo
-        $prezzoBase = $prodotto->getPrezzoAttivo();
+        $user = $request->user();
+        $pricing = PrezziService::prezzoVisibile($prodotto, $user instanceof User ? $user : null);
 
-        if ($prezzoBase === null) {
-            return back()->with('error', 'Prezzo non disponibile');
+        if (($pricing['ordinabile'] ?? false) !== true || ($pricing['prezzo'] ?? null) === null) {
+            return back()->with('error', 'Prodotto non ordinabile');
         }
 
         // Calcolo prezzo in base all’unità
         try {
-            $prezzoUnitario = $prodotto->priceForUnit($unita, $prezzoBase);
+            $prezzoUnitario = $unita === ($prodotto->unita_misura ?? 'NR')
+                ? (float) ($pricing['prezzo_lordo'] ?? $pricing['prezzo'])
+                : $prodotto->priceForUnit($unita, (float) ($pricing['prezzo_lordo'] ?? $pricing['prezzo']));
         } catch (\Throwable $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -55,6 +60,8 @@ class CartController extends Controller
             'nome'            => $prodotto->nome,
             'unita'           => $unita,
             'prezzo_unitario' => round($prezzoUnitario, 2),
+            'sconto_percentuale' => (float) ($pricing['sconto_percentuale'] ?? 0),
+            'iva_percentuale' => (float) ($pricing['iva_percentuale'] ?? 22),
             'quantita'        => ($cart[$key]['quantita'] ?? 0) + 1,
         ];
 

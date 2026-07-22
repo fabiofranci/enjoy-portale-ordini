@@ -8,6 +8,7 @@ use App\Models\Ordine;
 use App\Models\OrdineItem;
 use App\Models\Product;
 use App\Models\User;
+use App\Services\PrezziService;
 use App\Services\Odoo\OdooQuoteRequestService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -32,6 +33,7 @@ final class OrderSubmissionService
         }
 
         $confirmationNumber = $this->normalizeConfirmationNumber($confirmationNumber);
+        $this->validateCartPrices($user, $cart);
         $this->igroupMailService->ensureConfigured();
 
         $ordine = DB::transaction(function () use ($user, $cart, $confirmationNumber): Ordine {
@@ -85,7 +87,7 @@ final class OrderSubmissionService
             'odoo_synced_at' => null,
         ]);
 
-        $this->replaceOrderItems($ordine, $cart);
+        $this->replaceOrderItems($ordine, $cart, $user);
 
         return $ordine;
     }
@@ -121,15 +123,15 @@ final class OrderSubmissionService
             'pdf_path' => null,
         ])->save();
 
-        $this->replaceOrderItems($ordine, $cart);
+        $this->replaceOrderItems($ordine, $cart, $user);
 
         return $ordine;
     }
 
-    private function replaceOrderItems(Ordine $ordine, array $cart): void
+    private function replaceOrderItems(Ordine $ordine, array $cart, User $user): void
     {
         $products = $this->loadProductsForCart($cart);
-        $rows = $this->buildOrderItemRows($ordine, $cart, $products);
+        $rows = $this->buildOrderItemRows($ordine, $cart, $products, $user);
 
         $ordine->items()->delete();
 
@@ -162,8 +164,9 @@ final class OrderSubmissionService
         }
 
         $products = Product::query()
+            ->with('packagings')
             ->whereIn('id', $productIds)
-            ->get(['id', 'unita_misura'])
+            ->get(['id', 'unita_misura', 'disponibile'])
             ->keyBy('id');
 
         $missingProductIds = $productIds
@@ -185,7 +188,7 @@ final class OrderSubmissionService
      * @param  Collection<int, Product>  $products
      * @return array<int, array<string, int|float|string|null>>
      */
-    private function buildOrderItemRows(Ordine $ordine, array $cart, Collection $products): array
+    private function buildOrderItemRows(Ordine $ordine, array $cart, Collection $products, User $user): array
     {
         $now = now();
         $rows = [];
@@ -202,9 +205,10 @@ final class OrderSubmissionService
 
             $quantity = max(1, (int) ($item['quantita'] ?? 1));
             $unit = $this->normalizeUnit($item['unita'] ?? null, $product->unita_misura);
-            $grossUnitPrice = $this->normalizeDecimal($item['prezzo_unitario'] ?? $item['prezzo_unitario_lordo'] ?? 0);
-            $discount = $this->normalizeDecimal($item['sconto_percentuale'] ?? 0);
-            $ivaPercentage = $this->normalizeDecimal($item['iva_percentuale'] ?? 22);
+            $pricing = $this->validPricingForProduct($product, $user);
+            $grossUnitPrice = $this->grossUnitPriceForUnit($product, $unit, $pricing);
+            $discount = $this->normalizeDecimal($pricing['sconto_percentuale'] ?? 0);
+            $ivaPercentage = $this->normalizeDecimal($pricing['iva_percentuale'] ?? 22);
 
             $grossDiscountedUnitPrice = round($grossUnitPrice * (1 - ($discount / 100)), 4);
             $grossLineTotal = round($grossDiscountedUnitPrice * $quantity, 2);
@@ -228,6 +232,74 @@ final class OrderSubmissionService
         }
 
         return $rows;
+    }
+
+    private function validateCartPrices(User $user, array $cart): void
+    {
+        $products = $this->loadProductsForCart($cart);
+
+        foreach ($cart as $item) {
+            $productId = $this->normalizeRequiredProductId($item['prodotto_id'] ?? null);
+            $product = $products->get($productId);
+
+            if (!$product instanceof Product) {
+                throw ValidationException::withMessages([
+                    'cart' => 'Il carrello contiene un prodotto non valido.',
+                ]);
+            }
+
+            $unit = $this->normalizeUnit($item['unita'] ?? null, $product->unita_misura);
+            $pricing = $this->validPricingForProduct($product, $user);
+            $this->grossUnitPriceForUnit($product, $unit, $pricing);
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function validPricingForProduct(Product $product, User $user): array
+    {
+        if ($product->disponibile === false) {
+            throw ValidationException::withMessages([
+                'cart' => 'Il carrello contiene un prodotto non disponibile.',
+            ]);
+        }
+
+        $pricing = PrezziService::prezzoVisibile($product, $user);
+
+        if (($pricing['ordinabile'] ?? false) !== true || ($pricing['prezzo'] ?? null) === null) {
+            throw ValidationException::withMessages([
+                'cart' => 'Il carrello contiene un prodotto non ordinabile o senza prezzo valido.',
+            ]);
+        }
+
+        return $pricing;
+    }
+
+    /**
+     * @param  array<string, mixed>  $pricing
+     */
+    private function grossUnitPriceForUnit(Product $product, string $unit, array $pricing): float
+    {
+        $grossUnitPrice = $this->normalizeDecimal($pricing['prezzo_lordo'] ?? $pricing['prezzo'] ?? 0);
+
+        if ($grossUnitPrice <= 0.0) {
+            throw ValidationException::withMessages([
+                'cart' => 'Il carrello contiene un prodotto senza prezzo valido.',
+            ]);
+        }
+
+        if ($unit === ($product->unita_misura ?? $unit)) {
+            return $grossUnitPrice;
+        }
+
+        try {
+            return round($product->priceForUnit($unit, $grossUnitPrice), 4);
+        } catch (\Throwable) {
+            throw ValidationException::withMessages([
+                'cart' => 'Il carrello contiene un confezionamento non valido.',
+            ]);
+        }
     }
 
     private function hasOutboundActivity(Ordine $ordine): bool

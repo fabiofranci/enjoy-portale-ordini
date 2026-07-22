@@ -64,7 +64,16 @@ class Listino extends Model
     public function products(): BelongsToMany
     {
         return $this->belongsToMany(Product::class, 'listino_prodotto', 'listino_id', 'product_id')
-            ->withPivot(['prezzo_lordo', 'sconto_percentuale', 'prezzo', 'iva_percentuale'])
+            ->withPivot([
+                'prezzo_lordo',
+                'sconto_percentuale',
+                'prezzo',
+                'iva_percentuale',
+                'ordinabile',
+                'motivo_non_ordinabile',
+                'prezzo_sorgente',
+                'unita_prezzo_sorgente',
+            ])
             ->withTimestamps();
     }
 

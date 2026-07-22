@@ -16,6 +16,19 @@ class ListinoProdotto extends Model
         'sconto_percentuale',
         'prezzo',
         'iva_percentuale',
+        'ordinabile',
+        'motivo_non_ordinabile',
+        'prezzo_sorgente',
+        'unita_prezzo_sorgente',
+    ];
+
+    protected $casts = [
+        'prezzo_lordo' => 'decimal:5',
+        'sconto_percentuale' => 'decimal:2',
+        'prezzo' => 'decimal:5',
+        'iva_percentuale' => 'decimal:2',
+        'ordinabile' => 'boolean',
+        'prezzo_sorgente' => 'decimal:5',
     ];
 
     public function prodotto(): BelongsTo

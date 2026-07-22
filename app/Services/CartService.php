@@ -7,6 +7,7 @@ use App\Models\OrdineItem;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class CartService
 {
@@ -29,7 +30,19 @@ class CartService
         $ordine = self::getDraftFor($user);
         $product = Product::findOrFail($productId);
 
+        if ($product->disponibile === false) {
+            throw ValidationException::withMessages([
+                'product' => 'Il prodotto selezionato non e\' disponibile.',
+            ]);
+        }
+
         $pricing = PrezziService::prezzoVisibile($product, $user);
+
+        if (($pricing['ordinabile'] ?? false) !== true || ($pricing['prezzo'] ?? null) === null) {
+            throw ValidationException::withMessages([
+                'product' => 'Il prodotto selezionato non e\' ordinabile.',
+            ]);
+        }
 
         $item = $ordine->items()->firstOrNew(['prodotto_id' => $product->id]);
         $item->quantita = max(1, (int) $item->quantita + $qty);

@@ -71,17 +71,24 @@ final class OdooQuoteRequestService
     private function createLead(Ordine $ordine): int
     {
         $payload = $this->buildLeadPayload($ordine);
-        $leadId = $this->client->executeKw(self::LEAD_MODEL, 'create', [[$payload]]);
+        $leadIdResponse = $this->client->executeKw(self::LEAD_MODEL, 'create', [[$payload]]);
+        $leadId = $this->normalizeInteger($leadIdResponse);
 
-        if (!is_int($leadId) && !ctype_digit((string) $leadId)) {
+        if ($leadId === null) {
+            Log::error('Unexpected Odoo lead id response', [
+                'ordine_id' => $ordine->id,
+                'response_type' => get_debug_type($leadIdResponse),
+                'response' => $leadIdResponse,
+            ]);
+
             throw new RuntimeException(sprintf(
                 'Unexpected Odoo lead id response for order %d: %s',
                 $ordine->id,
-                get_debug_type($leadId)
+                get_debug_type($leadIdResponse)
             ));
         }
 
-        return (int) $leadId;
+        return $leadId;
     }
 
     /**
@@ -200,15 +207,17 @@ final class OdooQuoteRequestService
         $attachmentId = $this->findAttachmentId($leadId, $pdfFileName);
 
         if ($attachmentId === null) {
-            $createdAttachmentId = $this->client->executeKw(
+            $createdAttachmentResponse = $this->client->executeKw(
                 self::ATTACHMENT_MODEL,
                 'create',
                 [[$attachmentValues]]
             );
+            $createdAttachmentId = $this->normalizeInteger($createdAttachmentResponse);
 
             Log::info('Created Odoo attachment for order quote request', [
                 'odoo_lead_id' => $leadId,
                 'attachment_id' => $createdAttachmentId,
+                'attachment_response_type' => get_debug_type($createdAttachmentResponse),
                 'filename' => $pdfFileName,
             ]);
 
@@ -298,8 +307,30 @@ final class OdooQuoteRequestService
             return $value;
         }
 
+        if (is_float($value) && $value > 0 && floor($value) === $value) {
+            return (int) $value;
+        }
+
         if (is_string($value) && ctype_digit($value) && (int) $value > 0) {
             return (int) $value;
+        }
+
+        if (is_array($value)) {
+            if (isset($value['id'])) {
+                return $this->normalizeInteger($value['id']);
+            }
+
+            if (isset($value['value'])) {
+                return $this->normalizeInteger($value['value']);
+            }
+
+            foreach ($value as $nestedValue) {
+                $normalized = $this->normalizeInteger($nestedValue);
+
+                if ($normalized !== null) {
+                    return $normalized;
+                }
+            }
         }
 
         return null;

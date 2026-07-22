@@ -8,6 +8,8 @@ use Filament\Actions\Action;
 use Filament\Support\Icons\Heroicon;
 use Filament\Notifications\Notification;
 use App\Models\Listino;
+use App\Models\User;
+use App\Services\PrezziService;
 
 class ViewProdotto extends ViewRecord
 {
@@ -32,8 +34,9 @@ class ViewProdotto extends ViewRecord
     public function getViewData(): array
     {
         $prodotto = $this->record;
-
-        $prezzoBase = $prodotto->getPrezzoAttivo();
+        $user = auth()->user();
+        $pricing = PrezziService::prezzoVisibile($prodotto, $user instanceof User ? $user : null);
+        $prezzoBase = ($pricing['ordinabile'] ?? false) === true ? ($pricing['prezzo'] ?? null) : null;
 
         return [
             'record' => $prodotto,
@@ -52,12 +55,12 @@ class ViewProdotto extends ViewRecord
                 ->action(function () {
                     $cart = session()->get('cart', []);
                     $prodotto = $this->record;
+                    $user = auth()->user();
+                    $pricing = PrezziService::prezzoVisibile($prodotto, $user instanceof User ? $user : null);
 
-                    $prezzo = $prodotto->getPrezzoAttivo();
-
-                    if ($prezzo === null) {
+                    if (($pricing['ordinabile'] ?? false) !== true || ($pricing['prezzo'] ?? null) === null) {
                         Notification::make()
-                            ->title('Prezzo non disponibile')
+                            ->title('Prodotto non ordinabile')
                             ->danger()
                             ->send();
 
@@ -66,8 +69,12 @@ class ViewProdotto extends ViewRecord
 
                     $cart[$prodotto->id] = [
                         'id' => $prodotto->id,
+                        'prodotto_id' => $prodotto->id,
                         'nome' => $prodotto->nome,
-                        'prezzo_unitario' => $prezzo,
+                        'unita' => $prodotto->unita_misura ?? 'NR',
+                        'prezzo_unitario' => (float) ($pricing['prezzo_lordo'] ?? $pricing['prezzo']),
+                        'sconto_percentuale' => (float) ($pricing['sconto_percentuale'] ?? 0),
+                        'iva_percentuale' => (float) ($pricing['iva_percentuale'] ?? 22),
                         'quantita' => ($cart[$prodotto->id]['quantita'] ?? 0) + 1,
                     ];
 
