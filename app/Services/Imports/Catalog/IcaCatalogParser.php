@@ -62,6 +62,13 @@ final readonly class IcaCatalogParser
             $incompletePackagingByRow[(int) ($anomaly['line'] ?? 0)][] = (string) ($anomaly['reason'] ?? 'packaging_incompleto');
         }
 
+        $missingCategoryRows = [];
+        foreach ($legacy['errors'] ?? [] as $error) {
+            if (($error['reason'] ?? null) === 'categoria_mancante') {
+                $missingCategoryRows[(int) ($error['line'] ?? 0)] = true;
+            }
+        }
+
         $rows = [];
         $associatedImages = [];
         $productRows = [];
@@ -73,6 +80,16 @@ final readonly class IcaCatalogParser
             $rowImages = $imagesByRow[$line] ?? [];
             $image = $rowImages[0] ?? null;
             $warnings = array_values(array_unique($incompletePackagingByRow[$line] ?? []));
+            $category = isset($missingCategoryRows[$line])
+                ? null
+                : $this->normalizer->text($sourceRow['category']['name'] ?? null);
+            $categoryCode = $category === null
+                ? null
+                : $this->normalizer->code($sourceRow['category']['code'] ?? null);
+
+            if ($category === null) {
+                $warnings[] = 'category_missing';
+            }
 
             if ($sourceRow['unit'] === null) {
                 $warnings[] = 'sales_unit_missing';
@@ -97,7 +114,8 @@ final readonly class IcaCatalogParser
                 'supplier_code' => $this->normalizer->code($sourceRow['sku']),
                 'customer_article_code' => $this->normalizer->code($sourceRow['sku']),
                 'description' => $this->normalizer->text($sourceRow['description']),
-                'category' => $this->normalizer->text($sourceRow['category']['name'] ?? null),
+                'category' => $category,
+                'category_code' => $categoryCode,
                 'sales_unit' => $this->normalizer->unit($sourceRow['unit']),
                 'source_price' => $this->normalizer->decimal($price['prezzo_sorgente'] ?? $price['prezzo'] ?? null),
                 'source_price_unit' => $this->normalizer->unit($price['unita_prezzo_sorgente'] ?? null),
@@ -129,7 +147,10 @@ final readonly class IcaCatalogParser
                 supplierCode: $this->normalizer->code($sourceRow['sku']),
                 customerArticleCode: $this->normalizer->code($sourceRow['sku']),
                 description: $this->normalizer->text($sourceRow['description']),
-                category: $this->normalizer->text($sourceRow['category']['name'] ?? null),
+                category: $category,
+                categoryCode: $categoryCode,
+                parentCategory: null,
+                parentCategoryCode: null,
                 salesUnit: $this->normalizer->unit($sourceRow['unit']),
                 sourcePrice: $this->normalizer->decimal($price['prezzo_sorgente'] ?? $price['prezzo'] ?? null),
                 sourcePriceUnit: $this->normalizer->unit($price['unita_prezzo_sorgente'] ?? null),

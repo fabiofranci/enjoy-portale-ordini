@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Filament\Pages\ImportaCatalogo;
+use App\Models\CategoriaCatalogo;
 use App\Models\Fornitore;
 use App\Models\ImportBatch;
 use App\Models\Listino;
@@ -113,11 +114,103 @@ final class CatalogPersistentImportTest extends TestCase
         $this->assertDatabaseCount('listino_referenze', 2);
         $this->assertDatabaseCount('referenza_packagings', 1);
         $this->assertDatabaseCount('import_batches', 2);
+        $this->assertDatabaseCount('categorie_catalogo', 1);
+        $this->assertDatabaseCount('referenza_fornitore_categoria', 2);
         $this->assertCount(1, Storage::disk('public')->allFiles('cataloghi/ica'));
         $this->assertSame(0, $second->referenze_create);
         $this->assertSame(0, $second->referenze_aggiornate);
         $this->assertSame(0, $second->prezzi_creati);
         $this->assertSame(0, $second->prezzi_aggiornati);
+    }
+
+    public function test_import_creates_category_and_links_it_to_reference(): void
+    {
+        $this->service()->import('ICA', 'Scuole', $this->icaFile([
+            ['10 Detergenti', 'ICA-CAT', 'Prodotto classificato', 4.5, 'NR', null],
+        ], false), 'scuole');
+
+        $category = CategoriaCatalogo::query()->firstOrFail();
+        $reference = ReferenzaFornitore::query()->firstOrFail();
+
+        $this->assertSame('10', $category->codice);
+        $this->assertSame('Detergenti', $category->nome);
+        $this->assertTrue($reference->categorie()->whereKey($category->id)->exists());
+    }
+
+    public function test_same_category_codes_are_separated_by_supplier(): void
+    {
+        $this->service()->import('ICA', 'ICA', $this->icaFile([
+            ['10 Detergenti', 'ICA-1', 'Prodotto ICA', 4.5, 'NR', null],
+        ], false), 'scuole');
+        $this->service()->import('IGROUP', 'IGROUP', $this->igroupCategoryFile([
+            [1, 'IG-1', 'Prodotto IGROUP', 9, '10', 'Detergenti'],
+        ]));
+
+        $this->assertDatabaseCount('categorie_catalogo', 2);
+        $this->assertSame(
+            ['ICA', 'IGROUP'],
+            CategoriaCatalogo::query()->with('fornitore')->get()->pluck('fornitore.code')->sort()->values()->all(),
+        );
+    }
+
+    public function test_category_name_is_updated_by_stable_source_code(): void
+    {
+        $this->service()->import('IGROUP', 'Listino', $this->igroupCategoryFile([
+            [1, 'IG-1', 'Prodotto', 9, '10', 'Detergenti'],
+        ]));
+        $this->service()->import('IGROUP', 'Listino', $this->igroupCategoryFile([
+            [1, 'IG-1', 'Prodotto', 9, '10', 'Detergenza professionale'],
+        ]));
+        $this->service()->import('IGROUP', 'Listino', $this->igroupCategoryFile([
+            [1, 'IG-1', 'Prodotto', 9, '11', 'Detergenza professionale'],
+        ]));
+
+        $this->assertDatabaseCount('categorie_catalogo', 1);
+        $this->assertDatabaseHas('categorie_catalogo', [
+            'codice' => '11',
+            'nome' => 'Detergenza professionale',
+        ]);
+    }
+
+    public function test_parent_category_is_created_and_linked_to_main_level(): void
+    {
+        $this->service()->import('IGROUP', 'Listino', $this->igroupCategoryFile([
+            [1, 'IG-1', 'Prodotto', 9, '10', 'Detergenti', '1', 'Pulizia'],
+        ]));
+
+        $parent = CategoriaCatalogo::query()->where('codice', '1')->firstOrFail();
+        $leaf = CategoriaCatalogo::query()->where('codice', '10')->firstOrFail();
+
+        $this->assertSame($parent->id, $leaf->parent_id);
+        $this->assertSame('Pulizia', $leaf->parent->nome);
+    }
+
+    public function test_missing_category_does_not_remove_existing_link_or_reference(): void
+    {
+        $this->service()->import('IGROUP', 'Listino', $this->igroupCategoryFile([
+            [1, 'IG-1', 'Prodotto', 9, '10', 'Detergenti'],
+        ]));
+        $this->service()->import('IGROUP', 'Listino', $this->igroupCategoryFile([
+            [1, 'IG-1', 'Prodotto', 9, null, null],
+            [2, 'IG-2', 'Senza categoria', 5, null, null],
+        ]));
+
+        $this->assertDatabaseCount('referenze_fornitore', 2);
+        $this->assertDatabaseCount('categorie_catalogo', 1);
+        $this->assertDatabaseCount('referenza_fornitore_categoria', 1);
+        $this->assertSame(1, ReferenzaFornitore::query()->where('supplier_code', 'IG-1')->firstOrFail()->categorie()->count());
+        $this->assertSame(0, ReferenzaFornitore::query()->where('supplier_code', 'IG-2')->firstOrFail()->categorie()->count());
+    }
+
+    public function test_category_is_not_invented_when_original_data_is_unavailable(): void
+    {
+        $this->service()->import('IGROUP', 'Listino', $this->igroupCategoryFile([
+            [1, 'IG-1', 'Prodotto', 9, null, null],
+        ]));
+
+        $this->assertDatabaseCount('referenze_fornitore', 1);
+        $this->assertDatabaseCount('categorie_catalogo', 0);
+        $this->assertDatabaseCount('referenza_fornitore_categoria', 0);
     }
 
     public function test_same_igroup_file_is_idempotent_and_does_not_persist_ica_profile(): void
@@ -451,6 +544,29 @@ final class CatalogPersistentImportTest extends TestCase
         );
 
         return $this->writeSpreadsheet($spreadsheet, 'igroup_catalog_');
+    }
+
+    /**
+     * @param  array<int, array<int, mixed>>  $rows
+     */
+    private function igroupCategoryFile(array $rows): string
+    {
+        $spreadsheet = new Spreadsheet;
+        $spreadsheet->getActiveSheet()->fromArray([
+            [
+                'id',
+                'Cod. Articolo',
+                'Articolo',
+                'Prezzo Netto',
+                'Cod. Categoria',
+                'Categoria',
+                'Cod. Macro Categoria',
+                'Macro Categoria',
+            ],
+            ...$rows,
+        ], null, 'A1');
+
+        return $this->writeSpreadsheet($spreadsheet, 'igroup_categories_');
     }
 
     /**

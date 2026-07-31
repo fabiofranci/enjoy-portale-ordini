@@ -94,22 +94,50 @@ final class CatalogoClienteService
 
         return $category === ''
             ? $query
-            : $query->where('referenze_fornitore.categoria', $category);
+            : $query->whereExists(function ($categoryQuery) use ($category): void {
+                $categoryQuery->selectRaw('1')
+                    ->from('referenza_fornitore_categoria')
+                    ->join(
+                        'categorie_catalogo',
+                        'categorie_catalogo.id',
+                        '=',
+                        'referenza_fornitore_categoria.categoria_catalogo_id'
+                    )
+                    ->whereColumn(
+                        'referenza_fornitore_categoria.referenza_fornitore_id',
+                        'referenze_fornitore.id'
+                    )
+                    ->where('categorie_catalogo.id', $category)
+                    ->where('categorie_catalogo.attiva', true)
+                    ->whereColumn('categorie_catalogo.fornitore_id', 'fornitori.id');
+            });
     }
 
     /**
-     * @return array<string, string>
+     * @return array<int, string>
      */
     public function categoryOptions(CentroCosto $centroCosto): array
     {
         return $this->query($centroCosto)
             ->reorder()
-            ->whereNotNull('referenze_fornitore.categoria')
-            ->where('referenze_fornitore.categoria', '<>', '')
-            ->select('referenze_fornitore.categoria')
+            ->join(
+                'referenza_fornitore_categoria',
+                'referenza_fornitore_categoria.referenza_fornitore_id',
+                '=',
+                'referenze_fornitore.id'
+            )
+            ->join(
+                'categorie_catalogo',
+                'categorie_catalogo.id',
+                '=',
+                'referenza_fornitore_categoria.categoria_catalogo_id'
+            )
+            ->where('categorie_catalogo.attiva', true)
+            ->whereColumn('categorie_catalogo.fornitore_id', 'fornitori.id')
+            ->select(['categorie_catalogo.id', 'categorie_catalogo.nome'])
             ->distinct()
-            ->orderBy('referenze_fornitore.categoria')
-            ->pluck('referenze_fornitore.categoria', 'referenze_fornitore.categoria')
+            ->orderBy('categorie_catalogo.nome')
+            ->pluck('categorie_catalogo.nome', 'categorie_catalogo.id')
             ->all();
     }
 
@@ -189,6 +217,9 @@ final class CatalogoClienteService
                 'listino:id,nome_listino,fornitore_id',
                 'referenza:id,fornitore_id,supplier_code,customer_article_code,descrizione,descrizione_estesa,categoria,sales_unit,immagine_path',
                 'referenza.fornitore:id,code,nome',
+                'referenza.categorie' => static fn ($query) => $query
+                    ->where('attiva', true)
+                    ->orderBy('nome'),
                 'referenza.packagings' => static fn ($query) => $query
                     ->orderBy('livello')
                     ->orderBy('id'),

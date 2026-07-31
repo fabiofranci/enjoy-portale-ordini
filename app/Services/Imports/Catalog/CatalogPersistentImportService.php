@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Imports\Catalog;
 
+use App\Models\CategoriaCatalogo;
 use App\Models\Fornitore;
 use App\Models\ImportBatch;
 use App\Models\Listino;
@@ -14,6 +15,7 @@ use App\Services\Imports\Catalog\Data\CatalogInspectionResult;
 use App\Services\Imports\Catalog\Exceptions\CatalogImportConflictException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
@@ -122,11 +124,10 @@ final readonly class CatalogPersistentImportService
                         $row->image,
                         $writtenImagePaths
                     );
-                    $reference->fill([
+                    $referenceAttributes = [
                         'customer_article_code' => $row->customerArticleCode,
                         'external_source_id' => $row->externalSourceId,
                         'descrizione' => $row->description,
-                        'categoria' => $row->category,
                         'sales_unit' => $row->salesUnit,
                         'ordinabile' => $row->orderable,
                         'motivo_non_ordinabile' => $row->nonOrderableReason,
@@ -137,7 +138,13 @@ final readonly class CatalogPersistentImportService
                             'source_sheet' => $row->sourceSheet,
                             'source_row' => $row->sourceRow,
                         ],
-                    ]);
+                    ];
+
+                    if ($row->category !== null) {
+                        $referenceAttributes['categoria'] = $row->category;
+                    }
+
+                    $reference->fill($referenceAttributes);
 
                     if ($imagePath !== null) {
                         $reference->immagine_path = $imagePath;
@@ -146,6 +153,11 @@ final readonly class CatalogPersistentImportService
 
                     $referenceChanged = $reference->isDirty();
                     $reference->save();
+
+                    if ($row->category !== null) {
+                        $category = $this->persistCategory($supplier, $row);
+                        $reference->categorie()->sync([$category->getKey()]);
+                    }
 
                     if ($referenceWasNew) {
                         $counts['referenze_create']++;
@@ -249,6 +261,75 @@ final readonly class CatalogPersistentImportService
 
             throw $exception;
         }
+    }
+
+    private function persistCategory(
+        Fornitore $supplier,
+        \App\Services\Imports\Catalog\Data\CatalogImportRow $row,
+    ): CategoriaCatalogo {
+        $parent = null;
+
+        if ($row->parentCategory !== null) {
+            $parent = $this->findOrCreateCategory(
+                $supplier,
+                $row->parentCategory,
+                $row->parentCategoryCode,
+                null,
+            );
+        }
+
+        return $this->findOrCreateCategory(
+            $supplier,
+            $row->category,
+            $row->categoryCode,
+            $parent?->getKey(),
+        );
+    }
+
+    private function findOrCreateCategory(
+        Fornitore $supplier,
+        string $name,
+        ?string $code,
+        ?int $parentId,
+    ): CategoriaCatalogo {
+        $slug = Str::slug($name);
+        if ($slug === '') {
+            $slug = 'categoria-'.hash('sha256', mb_strtolower($name));
+        }
+
+        $category = CategoriaCatalogo::query()
+            ->where('fornitore_id', $supplier->getKey())
+            ->when(
+                $code !== null,
+                fn ($query) => $query->where(function ($query) use ($code, $slug): void {
+                    $query->where('codice', $code)->orWhere('slug', $slug);
+                }),
+                fn ($query) => $query->where('slug', $slug),
+            )
+            ->first();
+
+        if ($category === null) {
+            $category = new CategoriaCatalogo([
+                'fornitore_id' => $supplier->getKey(),
+                'codice' => $code,
+                'nome' => $name,
+                'slug' => $slug,
+                'parent_id' => $parentId,
+                'attiva' => true,
+            ]);
+        } else {
+            $category->fill([
+                'codice' => $code ?? $category->codice,
+                'nome' => $name,
+                'slug' => $slug,
+                'parent_id' => $parentId ?? $category->parent_id,
+                'attiva' => true,
+            ]);
+        }
+
+        $category->save();
+
+        return $category;
     }
 
     private function findOrCreateListino(

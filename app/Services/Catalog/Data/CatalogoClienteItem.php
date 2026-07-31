@@ -53,7 +53,7 @@ final readonly class CatalogoClienteItem
             priceUnit: $price->price_unit,
             salesUnit: $reference->sales_unit,
             immaginePath: $reference->immagine_path,
-            categoria: $reference->categoria,
+            categoria: $reference->categorie->first()?->nome,
             listinoNome: (string) $listino->nome_listino,
             packaging: $reference->packagings
                 ->map(static fn ($packaging): array => [
