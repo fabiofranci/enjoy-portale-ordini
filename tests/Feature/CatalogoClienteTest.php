@@ -20,6 +20,7 @@ use App\Models\User;
 use App\Services\Catalog\CatalogoClienteService;
 use App\Services\Catalog\Exceptions\CatalogoClienteIncoerenteException;
 use Filament\Facades\Filament;
+use Filament\Tables\Filters\SelectFilter;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -355,6 +356,61 @@ final class CatalogoClienteTest extends TestCase
         $this->assertSame(
             ['WITH-CATEGORY'],
             $this->service->items($this->centroCosto, search: null, category: (string) $category->id)->pluck('supplierCode')->all(),
+        );
+        $this->assertSame(
+            ['WITHOUT-CATEGORY'],
+            $this->service
+                ->items(
+                    $this->centroCosto,
+                    category: CategoriaCatalogo::FILTER_WITHOUT_CATEGORY,
+                )
+                ->pluck('supplierCode')
+                ->all(),
+        );
+    }
+
+    public function test_catalogo_cliente_mostra_categoria_e_filtra_categoria_e_senza_categoria(): void
+    {
+        $list = $this->priceList($this->ica, 'Catalogo filtrabile');
+        $categorized = $this->reference($this->ica, 'WITH-CATEGORY');
+        $uncategorized = $this->reference($this->ica, 'WITHOUT-CATEGORY');
+        $category = $this->catalogCategory($this->ica, 'Carta');
+        $categorized->categorie()->attach($category);
+        $categorizedPrice = $this->price($list, $categorized, 1);
+        $uncategorizedPrice = $this->price($list, $uncategorized, 2);
+        $this->assign($this->centroCosto, $list);
+        $user = $this->clientUser($this->cliente);
+        $this->useClientPanel();
+
+        $component = Livewire::actingAs($user)
+            ->test(ListProdotti::class)
+            ->assertTableColumnVisible('catalog_categories')
+            ->assertTableColumnStateSet('catalog_categories', ['Carta'], $categorizedPrice)
+            ->assertTableFilterExists(
+                'categoria',
+                static fn (SelectFilter $filter): bool => $filter->getPlaceholder() === 'Tutte le categorie'
+                    && $filter->getOptions() === [
+                        CategoriaCatalogo::FILTER_WITHOUT_CATEGORY => 'Senza categoria',
+                        $category->id => 'Carta',
+                    ],
+            )
+            ->assertCanSeeTableRecords([$categorizedPrice, $uncategorizedPrice]);
+
+        $component
+            ->filterTable('categoria', $category->id)
+            ->assertCanSeeTableRecords([$categorizedPrice])
+            ->assertCanNotSeeTableRecords([$uncategorizedPrice])
+            ->filterTable('categoria', CategoriaCatalogo::FILTER_WITHOUT_CATEGORY)
+            ->assertCanSeeTableRecords([$uncategorizedPrice])
+            ->assertCanNotSeeTableRecords([$categorizedPrice])
+            ->removeTableFilters()
+            ->searchTable('WITHOUT-CATEGORY')
+            ->assertCanSeeTableRecords([$uncategorizedPrice])
+            ->assertCanNotSeeTableRecords([$categorizedPrice]);
+
+        $this->assertSame(
+            [10, 25, 50],
+            $component->instance()->getTable()->getPaginationPageOptions(),
         );
     }
 

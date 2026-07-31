@@ -82,6 +82,10 @@ final readonly class CatalogPersistentImportService
                     $validFrom,
                     $validTo
                 );
+                $existingCategoryIds = CategoriaCatalogo::query()
+                    ->where('fornitore_id', $supplier->getKey())
+                    ->pluck('id')
+                    ->all();
 
                 $blockingConflicts = $this->blockingConflicts($inspection);
                 if ($blockingConflicts !== []) {
@@ -214,6 +218,12 @@ final readonly class CatalogPersistentImportService
                     }
                 }
 
+                $categorySummary = $this->categorySummary(
+                    $supplier,
+                    $listino,
+                    $existingCategoryIds,
+                );
+
                 $batch->update([
                     'listino_id' => $listino->getKey(),
                     'stato' => ImportBatch::STATUS_COMPLETED,
@@ -221,7 +231,10 @@ final readonly class CatalogPersistentImportService
                     ...$counts,
                     'warnings' => $this->warnings($inspection),
                     'errori' => [],
-                    'riepilogo' => $this->summary($inspection),
+                    'riepilogo' => $this->summary(
+                        $inspection,
+                        categorySummary: $categorySummary,
+                    ),
                     'completato_il' => now(),
                 ]);
 
@@ -364,6 +377,51 @@ final readonly class CatalogPersistentImportService
     }
 
     /**
+     * @param  array<int, int>  $existingCategoryIds
+     * @return array<string, mixed>
+     */
+    private function categorySummary(
+        Fornitore $supplier,
+        Listino $listino,
+        array $existingCategoryIds,
+    ): array {
+        $references = ReferenzaFornitore::query()
+            ->where('fornitore_id', $supplier->getKey())
+            ->whereHas(
+                'prezziListino',
+                static fn ($query) => $query->where('listino_id', $listino->getKey()),
+            );
+        $activeCategory = static fn ($query) => $query
+            ->where('attiva', true)
+            ->where('nome', '<>', '')
+            ->where('fornitore_id', $supplier->getKey());
+        $createdCategories = CategoriaCatalogo::query()
+            ->where('fornitore_id', $supplier->getKey())
+            ->when(
+                $existingCategoryIds !== [],
+                static fn ($query) => $query->whereNotIn('id', $existingCategoryIds),
+            )
+            ->count();
+        $categoriesBySupplier = CategoriaCatalogo::query()
+            ->join('fornitori', 'fornitori.id', '=', 'categorie_catalogo.fornitore_id')
+            ->where('categorie_catalogo.attiva', true)
+            ->where('categorie_catalogo.nome', '<>', '')
+            ->selectRaw('fornitori.code as supplier_code, COUNT(*) as total')
+            ->groupBy('fornitori.code')
+            ->orderBy('fornitori.code')
+            ->pluck('total', 'supplier_code')
+            ->map(static fn (mixed $count): int => (int) $count)
+            ->all();
+
+        return [
+            'categorie_create' => $createdCategories,
+            'referenze_collegate' => (clone $references)->whereHas('categorie', $activeCategory)->count(),
+            'referenze_senza_categoria' => (clone $references)->whereDoesntHave('categorie', $activeCategory)->count(),
+            'categorie_per_fornitore' => $categoriesBySupplier,
+        ];
+    }
+
+    /**
      * @return array{0:?string, 1:?string}
      */
     private function validityDates(CatalogInspectionResult $inspection): array
@@ -503,9 +561,11 @@ final readonly class CatalogPersistentImportService
     private function summary(
         CatalogInspectionResult $inspection,
         array $blockingConflicts = [],
+        array $categorySummary = [],
     ): array {
         return [
             'summary' => $inspection->report['summary'] ?? [],
+            'categories' => $categorySummary,
             'diagnostics' => [
                 'duplicate_supplier_codes' => $inspection->report['diagnostics']['duplicate_supplier_codes'] ?? [],
                 'duplicate_customer_article_codes' => $inspection->report['diagnostics']['duplicate_customer_article_codes'] ?? [],

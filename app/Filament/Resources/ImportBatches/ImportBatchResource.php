@@ -87,6 +87,28 @@ class ImportBatchResource extends Resource
             TextEntry::make('prezzi_creati')->label('Prezzi creati')->numeric(),
             TextEntry::make('prezzi_aggiornati')->label('Prezzi aggiornati')->numeric(),
             TextEntry::make('righe_ignorate')->label('Righe ignorate')->numeric(),
+            TextEntry::make('riepilogo.categories.categorie_create')
+                ->label('Categorie create')
+                ->numeric()
+                ->placeholder('0'),
+            TextEntry::make('riepilogo.categories.referenze_collegate')
+                ->label('Referenze con categoria')
+                ->numeric()
+                ->placeholder('0'),
+            TextEntry::make('riepilogo.categories.referenze_senza_categoria')
+                ->label('Referenze senza categoria')
+                ->numeric()
+                ->placeholder('0'),
+            TextEntry::make('category_supplier_summary')
+                ->label('Categorie per fornitore')
+                ->state(fn (ImportBatch $record): array => collect(
+                    data_get($record->riepilogo, 'categories.categorie_per_fornitore', [])
+                )
+                    ->map(static fn (mixed $count, string $supplier): string => "{$supplier}: {$count}")
+                    ->values()
+                    ->all())
+                ->listWithLineBreaks()
+                ->placeholder('-'),
             TextEntry::make('warnings')
                 ->label('Warning')
                 ->listWithLineBreaks()

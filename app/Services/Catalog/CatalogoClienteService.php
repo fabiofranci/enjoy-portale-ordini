@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Catalog;
 
+use App\Models\CategoriaCatalogo;
 use App\Models\CentroCosto;
 use App\Models\ListinoReferenza;
 use App\Models\User;
@@ -12,6 +13,7 @@ use App\Services\Catalog\Exceptions\CatalogoClienteIncoerenteException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -92,25 +94,24 @@ final class CatalogoClienteService
     {
         $category = is_scalar($category) ? trim((string) $category) : '';
 
-        return $category === ''
-            ? $query
-            : $query->whereExists(function ($categoryQuery) use ($category): void {
-                $categoryQuery->selectRaw('1')
-                    ->from('referenza_fornitore_categoria')
-                    ->join(
-                        'categorie_catalogo',
-                        'categorie_catalogo.id',
-                        '=',
-                        'referenza_fornitore_categoria.categoria_catalogo_id'
-                    )
-                    ->whereColumn(
-                        'referenza_fornitore_categoria.referenza_fornitore_id',
-                        'referenze_fornitore.id'
-                    )
-                    ->where('categorie_catalogo.id', $category)
-                    ->where('categorie_catalogo.attiva', true)
-                    ->whereColumn('categorie_catalogo.fornitore_id', 'fornitori.id');
+        if ($category === '') {
+            return $query;
+        }
+
+        if ($category === CategoriaCatalogo::FILTER_WITHOUT_CATEGORY) {
+            return $query->whereNotExists(function ($categoryQuery): void {
+                $this->constrainVisibleCategory($categoryQuery);
             });
+        }
+
+        $categoryId = filter_var($category, FILTER_VALIDATE_INT);
+        if ($categoryId === false || $categoryId < 1) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereExists(function ($categoryQuery) use ($categoryId): void {
+            $this->constrainVisibleCategory($categoryQuery, $categoryId);
+        });
     }
 
     /**
@@ -133,6 +134,7 @@ final class CatalogoClienteService
                 'referenza_fornitore_categoria.categoria_catalogo_id'
             )
             ->where('categorie_catalogo.attiva', true)
+            ->where('categorie_catalogo.nome', '<>', '')
             ->whereColumn('categorie_catalogo.fornitore_id', 'fornitori.id')
             ->select(['categorie_catalogo.id', 'categorie_catalogo.nome'])
             ->distinct()
@@ -219,6 +221,7 @@ final class CatalogoClienteService
                 'referenza.fornitore:id,code,nome',
                 'referenza.categorie' => static fn ($query) => $query
                     ->where('attiva', true)
+                    ->where('nome', '<>', '')
                     ->orderBy('nome'),
                 'referenza.packagings' => static fn ($query) => $query
                     ->orderBy('livello')
@@ -253,5 +256,28 @@ final class CatalogoClienteService
             'Il catalogo contiene piu prezzi validi per la stessa referenza.',
             $codes,
         );
+    }
+
+    private function constrainVisibleCategory(QueryBuilder $query, ?int $categoryId = null): void
+    {
+        $query->selectRaw('1')
+            ->from('referenza_fornitore_categoria')
+            ->join(
+                'categorie_catalogo',
+                'categorie_catalogo.id',
+                '=',
+                'referenza_fornitore_categoria.categoria_catalogo_id'
+            )
+            ->whereColumn(
+                'referenza_fornitore_categoria.referenza_fornitore_id',
+                'referenze_fornitore.id'
+            )
+            ->where('categorie_catalogo.attiva', true)
+            ->where('categorie_catalogo.nome', '<>', '')
+            ->whereColumn('categorie_catalogo.fornitore_id', 'fornitori.id')
+            ->when(
+                $categoryId !== null,
+                static fn ($query) => $query->where('categorie_catalogo.id', $categoryId),
+            );
     }
 }

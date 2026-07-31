@@ -20,6 +20,26 @@ php artisan db:seed --class=SupplierSeeder --force
 `DatabaseSeeder` esegue `SupplierSeeder` anche in produzione, ma limita i
 seeder con utenti e dati dimostrativi agli ambienti non production.
 
+## Reimport categorie catalogo
+
+La valorizzazione delle categorie usa l'import persistente gia disponibile in
+`/admin/importa-catalogo`. La procedura non cancella le referenze assenti dal
+file e usa fornitore, codice e slug normalizzato per non duplicare le categorie.
+
+1. Importare `storage/app/imports/LISTINO SCUOLE 2_ 2026_REV1 ENJOY.xlsx`
+   selezionando fornitore `ICA` e profilo `scuole`.
+2. Importare `storage/app/imports/listini_esterni.xlsx` selezionando fornitore
+   `IGROUP`; per IGROUP non va selezionato un profilo ICA.
+3. Aprire il batch da `Import Cataloghi` e verificare categorie create,
+   referenze con categoria, referenze senza categoria e categorie per
+   fornitore.
+4. Ripetere l'import solo dopo avere verificato il primo batch: la seconda
+   esecuzione deve riportare zero categorie create.
+
+I file di origine e i report diagnostici in `storage/app/imports` restano
+esclusi da Git. La reimportazione dei file reali in produzione va eseguita solo
+dopo un'approvazione esplicita.
+
 ## Email ordini cliente
 
 Ogni ordine viene registrato prima dell'invio email. Il destinatario del

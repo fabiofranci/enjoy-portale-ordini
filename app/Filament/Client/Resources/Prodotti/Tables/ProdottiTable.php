@@ -54,10 +54,15 @@ class ProdottiTable
                         ->all())
                     ->listWithLineBreaks()
                     ->bulleted(),
-                TextColumn::make('referenza.categorie.nome')
+                TextColumn::make('catalog_categories')
                     ->label('Categoria')
+                    ->state(fn (ListinoReferenza $record): array => $record->referenza
+                        ->categorie
+                        ->pluck('nome')
+                        ->all())
+                    ->badge()
                     ->placeholder('-')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->wrap(),
                 TextColumn::make('listino.nome_listino')
                     ->label('Listino')
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -66,6 +71,7 @@ class ProdottiTable
                 SelectFilter::make('categoria')
                     ->label('Categoria')
                     ->options(fn (ListProdotti $livewire): array => $livewire->categoryOptions())
+                    ->placeholder('Tutte le categorie')
                     ->query(fn (Builder $query, array $data): Builder => app(CatalogoClienteService::class)
                         ->applyCategory($query, $data['value'] ?? null)),
             ])

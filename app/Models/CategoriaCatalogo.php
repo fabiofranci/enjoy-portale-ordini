@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 final class CategoriaCatalogo extends Model
 {
+    public const FILTER_WITHOUT_CATEGORY = '__without_category__';
+
     protected $table = 'categorie_catalogo';
 
     protected $fillable = [

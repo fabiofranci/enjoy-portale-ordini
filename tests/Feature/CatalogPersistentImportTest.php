@@ -106,7 +106,7 @@ final class CatalogPersistentImportTest extends TestCase
     {
         $file = $this->icaFile();
 
-        $this->service()->import('ICA', 'Scuole', $file, 'scuole');
+        $first = $this->service()->import('ICA', 'Scuole', $file, 'scuole');
         $second = $this->service()->import('ICA', 'Scuole', $file, 'scuole');
 
         $this->assertDatabaseCount('referenze_fornitore', 2);
@@ -121,6 +121,18 @@ final class CatalogPersistentImportTest extends TestCase
         $this->assertSame(0, $second->referenze_aggiornate);
         $this->assertSame(0, $second->prezzi_creati);
         $this->assertSame(0, $second->prezzi_aggiornati);
+        $this->assertSame([
+            'categorie_create' => 1,
+            'referenze_collegate' => 2,
+            'referenze_senza_categoria' => 0,
+            'categorie_per_fornitore' => ['ICA' => 1],
+        ], $first->riepilogo['categories']);
+        $this->assertSame([
+            'categorie_create' => 0,
+            'referenze_collegate' => 2,
+            'referenze_senza_categoria' => 0,
+            'categorie_per_fornitore' => ['ICA' => 1],
+        ], $second->riepilogo['categories']);
     }
 
     public function test_import_creates_category_and_links_it_to_reference(): void

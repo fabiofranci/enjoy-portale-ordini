@@ -3,6 +3,7 @@
 namespace App\Filament\Client\Resources\Prodotti\Pages;
 
 use App\Filament\Client\Resources\Prodotti\ProdottoResource;
+use App\Models\CategoriaCatalogo;
 use App\Models\CentroCosto;
 use App\Models\ListinoReferenza;
 use App\Models\User;
@@ -121,7 +122,9 @@ class ListProdotti extends ListRecords
         }
 
         try {
-            return $this->catalogService()->categoryOptions($centroCosto);
+            return [
+                CategoriaCatalogo::FILTER_WITHOUT_CATEGORY => 'Senza categoria',
+            ] + $this->catalogService()->categoryOptions($centroCosto);
         } catch (CatalogoClienteIncoerenteException) {
             return [];
         }
