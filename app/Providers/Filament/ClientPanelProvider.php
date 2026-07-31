@@ -2,11 +2,17 @@
 
 namespace App\Providers\Filament;
 
-use Illuminate\Support\Facades\Route;
+use App\Filament\Client\Pages\Carrello;
+use App\Filament\Client\Resources\Prodotti\ProdottoResource;
+use App\Http\Controllers\Client\CartController;
+use App\Http\Middleware\EnsureClienteRole;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Navigation\NavigationBuilder;
+use Filament\Navigation\NavigationGroup;
+use Filament\Navigation\NavigationItem;
 use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
@@ -16,15 +22,8 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Route;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
-use App\Http\Middleware\EnsureClienteRole; // ✅
-use App\Http\Controllers\Client\CartController;
-use Filament\Navigation\NavigationBuilder;
-use Filament\Navigation\NavigationGroup;
-use Filament\Navigation\NavigationItem;
-use App\Filament\Client\Resources\Prodotti\ProdottoResource;
-use App\Models\Categoria;
-use App\Filament\Client\Pages\Carrello;
 
 class ClientPanelProvider extends PanelProvider
 {
@@ -38,48 +37,30 @@ class ClientPanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::Blue,
             ])
-->navigation(function (NavigationBuilder $builder): NavigationBuilder {
-    return $builder->groups([
-        // 🏠 Dashboard + Carrello
-        NavigationGroup::make()
-            ->label('Navigazione')
-            ->items([
-                NavigationItem::make()
-                    ->label('Dashboard')
-                    ->icon('heroicon-o-home')
-                    ->url(Dashboard::getUrl()),
-
-                NavigationItem::make()
-                    ->label('Carrello')
-                    ->icon('heroicon-o-shopping-cart')
-                    ->url(Carrello::getUrl()),
-            ]),
-
-        // 📦 Catalogo dinamico
-        NavigationGroup::make()
-            ->label('Catalogo')
-            ->items(array_merge(
-                [
-                    NavigationItem::make()
-                        ->label('Tutti i prodotti')
-                        ->icon('heroicon-o-rectangle-stack')
-                        ->url(ProdottoResource::getUrl('index')),
-                ],
-                Categoria::whereNull('categoria_padre_id')
-                    ->orderBy('nome')
-                    ->get()
-                    ->map(function ($categoria) {
-                        return NavigationItem::make()
-                            ->label($categoria->nome)
-                            ->icon('heroicon-o-tag')
-                            ->url(ProdottoResource::getUrl('index', [
-                                'categoria' => $categoria->id,
-                            ]));
-                    })
-                    ->toArray()
-            )),
-    ]);
-})
+            ->navigation(function (NavigationBuilder $builder): NavigationBuilder {
+                return $builder->groups([
+                    NavigationGroup::make()
+                        ->label('Navigazione')
+                        ->items([
+                            NavigationItem::make()
+                                ->label('Dashboard')
+                                ->icon('heroicon-o-home')
+                                ->url(Dashboard::getUrl()),
+                            NavigationItem::make()
+                                ->label('Carrello')
+                                ->icon('heroicon-o-shopping-cart')
+                                ->url(Carrello::getUrl()),
+                        ]),
+                    NavigationGroup::make()
+                        ->label('Catalogo')
+                        ->items([
+                            NavigationItem::make()
+                                ->label('Catalogo')
+                                ->icon('heroicon-o-rectangle-stack')
+                                ->url(ProdottoResource::getUrl('index')),
+                        ]),
+                ]);
+            })
             ->discoverResources(in: app_path('Filament/Client/Resources'), for: 'App\\Filament\\Client\\Resources')
             ->discoverPages(in: app_path('Filament/Client/Pages'), for: 'App\\Filament\\Client\\Pages')
             ->pages([
@@ -99,10 +80,10 @@ class ClientPanelProvider extends PanelProvider
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
 
-                EnsureClienteRole::class, // ✅ filtro ruolo CLIENTE per tutto il panel
+                EnsureClienteRole::class,
             ])
             ->authMiddleware([
-                Authenticate::class, // ✅ forza autenticazione
+                Authenticate::class,
             ])
             ->routes(function () {
                 Route::post('/carrello/update', [\App\Http\Controllers\Client\CartController::class, 'update'])
@@ -117,7 +98,5 @@ class ClientPanelProvider extends PanelProvider
                 Route::post('/carrello/checkout', [CartController::class, 'checkout'])
                     ->name('pages.carrello.checkout');
             });
-
-
     }
 }

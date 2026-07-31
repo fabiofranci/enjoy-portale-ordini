@@ -2,10 +2,8 @@
 
 namespace App\Filament\Resources\Fornitori\Schemas;
 
-use App\Models\Categoria;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\TextArea;
+use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Schema;
 
 class FornitoreForm
@@ -13,10 +11,21 @@ class FornitoreForm
     public static function configure(Schema $schema): Schema
     {
         return $schema->schema([
+            TextInput::make('code')
+                ->label('Codice')
+                ->required()
+                ->maxLength(64)
+                ->unique(ignoreRecord: true)
+                ->columnSpan(1),
+
             TextInput::make('nome')
                 ->label('Nome')
                 ->required()
                 ->columnSpanFull(),
+
+            Toggle::make('attivo')
+                ->label('Attivo')
+                ->default(true),
 
             TextInput::make('partita_iva')
                 ->label('Partita IVA')

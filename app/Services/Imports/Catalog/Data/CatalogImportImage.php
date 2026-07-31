@@ -15,6 +15,7 @@ final readonly class CatalogImportImage
         public ?string $contentHash,
         public int $width,
         public int $height,
+        public ?string $content = null,
     ) {}
 
     /**
