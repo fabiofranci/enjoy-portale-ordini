@@ -109,6 +109,7 @@ final class SpreadsheetDocumentReader
         $extension = null;
         $mimeType = null;
         $contentHash = null;
+        $content = null;
 
         try {
             if (method_exists($drawing, 'getExtension')) {
@@ -120,9 +121,10 @@ final class SpreadsheetDocumentReader
             }
 
             if (method_exists($drawing, 'getPath')) {
-                $content = @file_get_contents($drawing->getPath());
-                if ($content !== false) {
-                    $contentHash = hash('sha256', $content);
+                $imageContent = @file_get_contents($drawing->getPath());
+                if ($imageContent !== false) {
+                    $content = $imageContent;
+                    $contentHash = hash('sha256', $imageContent);
                 }
             }
         } catch (Throwable) {
@@ -138,6 +140,7 @@ final class SpreadsheetDocumentReader
             contentHash: $contentHash,
             width: $drawing->getWidth(),
             height: $drawing->getHeight(),
+            content: $content,
         );
     }
 

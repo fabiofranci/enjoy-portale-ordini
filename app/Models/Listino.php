@@ -13,6 +13,7 @@ class Listino extends Model
 
     protected $fillable = [
         'nome_listino',
+        'descrizione',
         'tipo',
         'fornitore_id',
         'centro_costo_id',
@@ -35,9 +36,19 @@ class Listino extends Model
         return $this->belongsTo(Fornitore::class, 'fornitore_id');
     }
 
+    public function referenzeListino(): HasMany
+    {
+        return $this->hasMany(ListinoReferenza::class, 'listino_id');
+    }
+
+    public function importBatches(): HasMany
+    {
+        return $this->hasMany(ImportBatch::class, 'listino_id');
+    }
+
     protected $casts = [
         'valido_dal' => 'date',
-        'valido_al'  => 'date',
+        'valido_al' => 'date',
         'odoo_id' => 'integer',
         'odoo_write_date' => 'datetime',
         'attivo' => 'boolean',

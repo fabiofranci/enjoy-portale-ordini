@@ -16,7 +16,9 @@ use App\Services\Imports\Catalog\Exceptions\CatalogImportConflictException;
 use Database\Seeders\SupplierSeeder;
 use DomainException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use InvalidArgumentException;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -116,6 +118,33 @@ final class CatalogPersistentImportTest extends TestCase
         $this->assertSame(0, $second->prezzi_aggiornati);
     }
 
+    public function test_same_igroup_file_is_idempotent_and_does_not_persist_ica_profile(): void
+    {
+        $file = $this->igroupFile($this->igroupRows());
+
+        $this->service()->import('IGROUP', 'Scuole', $file, 'scuole');
+        $second = $this->service()->import('IGROUP', 'Scuole', $file, 'scuole');
+
+        $this->assertDatabaseCount('referenze_fornitore', 5);
+        $this->assertDatabaseCount('Listini', 1);
+        $this->assertDatabaseCount('listino_referenze', 5);
+        $this->assertDatabaseCount('import_batches', 2);
+        $this->assertNull($second->profilo);
+        $this->assertSame(0, $second->referenze_create);
+        $this->assertSame(0, $second->referenze_aggiornate);
+        $this->assertSame(0, $second->prezzi_creati);
+        $this->assertSame(0, $second->prezzi_aggiornati);
+        $this->assertSame(1, $second->righe_ignorate);
+    }
+
+    public function test_reference_schema_does_not_store_list_price(): void
+    {
+        $this->assertFalse(Schema::hasColumn('referenze_fornitore', 'prezzo'));
+        $this->assertTrue(Schema::hasColumn('listino_referenze', 'prezzo'));
+        $this->assertTrue(Schema::hasColumn('listino_referenze', 'prezzo_sorgente'));
+        $this->assertFalse(Schema::hasColumn('listino_referenze', 'fornitore_id'));
+    }
+
     public function test_new_import_updates_price_without_deleting_missing_references(): void
     {
         $this->service()->import('ICA', 'Scuole', $this->icaFile(), 'scuole');
@@ -209,6 +238,8 @@ final class CatalogPersistentImportTest extends TestCase
         $this->assertSame(5, $batch->referenze_create);
         $this->assertSame(5, $batch->prezzi_creati);
         $this->assertSame(1, $batch->righe_ignorate);
+        $this->assertNotEmpty($batch->warnings);
+        $this->assertSame([], $batch->errori);
         $this->assertDatabaseCount('referenze_fornitore', 5);
         $this->assertDatabaseCount('listino_referenze', 5);
         $this->assertDatabaseHas('referenze_fornitore', [
@@ -266,6 +297,32 @@ final class CatalogPersistentImportTest extends TestCase
             'conflicting_supplier_code_duplicate',
             $batch->riepilogo['diagnostics']['conflicts'][0]['type']
         );
+    }
+
+    public function test_parser_failure_is_recorded_in_batch_without_catalog_writes(): void
+    {
+        try {
+            $this->service()->import(
+                'ICA',
+                'Ristorazione',
+                $this->icaFile(withImages: false),
+                'ristorazione'
+            );
+            $this->fail('Il profilo ICA non verificato doveva essere rifiutato.');
+        } catch (InvalidArgumentException) {
+            // The failed batch is asserted below.
+        }
+
+        $batch = ImportBatch::query()->firstOrFail();
+
+        $this->assertSame(ImportBatch::STATUS_FAILED, $batch->stato);
+        $this->assertSame('ristorazione', $batch->profilo);
+        $this->assertNotEmpty($batch->errori);
+        $this->assertNotNull($batch->iniziato_il);
+        $this->assertNotNull($batch->completato_il);
+        $this->assertDatabaseCount('Listini', 0);
+        $this->assertDatabaseCount('referenze_fornitore', 0);
+        $this->assertDatabaseCount('listino_referenze', 0);
     }
 
     public function test_cross_supplier_list_reference_is_rejected_by_application_validation(): void

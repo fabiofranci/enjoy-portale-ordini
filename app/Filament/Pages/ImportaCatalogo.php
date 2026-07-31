@@ -64,6 +64,7 @@ class ImportaCatalogo extends Page implements HasForms
                 ->label('Profilo')
                 ->options(['scuole' => 'Scuole'])
                 ->visible(fn (callable $get): bool => $get('supplier_code') === 'ICA')
+                ->dehydratedWhenHidden(false)
                 ->required(fn (callable $get): bool => $get('supplier_code') === 'ICA'),
             FileUpload::make('file')
                 ->label('File catalogo')
