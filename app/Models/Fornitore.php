@@ -2,13 +2,16 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Fornitore extends Model
 {
     protected $table = 'fornitori';
 
     protected $fillable = [
+        'code',
         'nome',
         'partita_iva',
         'email',
@@ -16,8 +19,20 @@ class Fornitore extends Model
         'indirizzo',
     ];
 
-    public function listini()
+    public function getRouteKeyName(): string
     {
-        return $this->hasMany(\App\Models\Listino::class, 'fornitore_id');
+        return 'code';
+    }
+
+    public function listini(): HasMany
+    {
+        return $this->hasMany(Listino::class, 'fornitore_id');
+    }
+
+    protected function code(): Attribute
+    {
+        return Attribute::make(
+            set: static fn (string $value): string => strtoupper(trim($value)),
+        );
     }
 }

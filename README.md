@@ -7,6 +7,19 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+## Seed fornitori catalogo
+
+Il seeder dei fornitori di catalogo usa `code` come identificatore stabile ed
+e' idempotente. In produzione puo essere eseguito separatamente senza richiamare
+i seeder demo:
+
+```bash
+php artisan db:seed --class=SupplierSeeder --force
+```
+
+`DatabaseSeeder` esegue `SupplierSeeder` anche in produzione, ma limita i
+seeder con utenti e dati dimostrativi agli ambienti non production.
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
