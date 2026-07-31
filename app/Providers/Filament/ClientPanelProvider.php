@@ -33,6 +33,7 @@ class ClientPanelProvider extends PanelProvider
             ->path('clienti')
             ->login() // genera /clienti/login /clienti/logout ecc.
             ->brandName('Portale Clienti Enjoy')
+            ->viteTheme('resources/css/filament/clienti/theme.css')
             ->colors([
                 'primary' => Color::Blue,
             ])

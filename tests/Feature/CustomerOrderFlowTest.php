@@ -188,7 +188,7 @@ final class CustomerOrderFlowTest extends TestCase
 
         Livewire::actingAs($this->user)
             ->test(Carrello::class)
-            ->assertSee('Il carrello e vuoto');
+            ->assertSee('Il carrello è vuoto');
 
         $this->assertFalse(session()->has(CatalogCartService::SESSION_KEY));
     }
