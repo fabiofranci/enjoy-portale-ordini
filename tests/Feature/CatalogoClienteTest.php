@@ -334,6 +334,21 @@ final class CatalogoClienteTest extends TestCase
         $this->assertCount(2, $ids->unique());
     }
 
+    public function test_query_non_usa_distinct_con_ordinamento_su_colonne_collegate(): void
+    {
+        $listino = $this->priceList($this->ica, 'ICA Scuole');
+        $this->price($listino, $this->reference($this->ica, 'MYSQL-COMPATIBLE'), 1);
+        $this->assign($this->centroCosto, $listino);
+
+        $query = $this->service->query($this->centroCosto);
+
+        $this->assertStringNotContainsString('distinct', strtolower($query->toSql()));
+        $this->assertSame(
+            'MYSQL-COMPATIBLE',
+            $query->firstOrFail()->referenza->supplier_code,
+        );
+    }
+
     public function test_rileva_prezzi_multipli_senza_sceglierne_uno(): void
     {
         $first = $this->priceList($this->ica, 'Primo');

@@ -191,8 +191,7 @@ final class CatalogoClienteService
                 'referenza.packagings' => static fn ($query) => $query
                     ->orderBy('livello')
                     ->orderBy('id'),
-            ])
-            ->distinct();
+            ]);
     }
 
     /**
