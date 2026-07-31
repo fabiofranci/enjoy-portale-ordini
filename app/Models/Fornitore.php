@@ -29,6 +29,16 @@ class Fornitore extends Model
         return $this->hasMany(Listino::class, 'fornitore_id');
     }
 
+    public function referenze(): HasMany
+    {
+        return $this->hasMany(ReferenzaFornitore::class, 'fornitore_id');
+    }
+
+    public function importBatches(): HasMany
+    {
+        return $this->hasMany(ImportBatch::class, 'fornitore_id');
+    }
+
     protected function code(): Attribute
     {
         return Attribute::make(
