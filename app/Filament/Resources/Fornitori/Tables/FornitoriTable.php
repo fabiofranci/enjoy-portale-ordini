@@ -2,13 +2,13 @@
 
 namespace App\Filament\Resources\Fornitori\Tables;
 
-use Filament\Tables;
-use Filament\Tables\Table;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Tables;
+use Filament\Tables\Table;
 
 class FornitoriTable
 {
@@ -16,6 +16,11 @@ class FornitoriTable
     {
         return $table
             ->columns([
+                Tables\Columns\TextColumn::make('code')
+                    ->label('Codice')
+                    ->sortable()
+                    ->searchable(),
+
                 Tables\Columns\TextColumn::make('nome')
                     ->label('Nome')
                     ->sortable()

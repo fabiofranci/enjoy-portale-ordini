@@ -11,7 +11,11 @@ class ListinoInfolist
     {
         return $schema
             ->components([
-                TextEntry::make('nome_listino'),
+                TextEntry::make('nome_listino')->label('Listino'),
+                TextEntry::make('fornitore.code')->label('Fornitore'),
+                TextEntry::make('descrizione')
+                    ->label('Descrizione')
+                    ->columnSpanFull(),
                 TextEntry::make('valido_dal')
                     ->date(),
                 TextEntry::make('valido_al')
