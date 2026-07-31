@@ -20,6 +20,20 @@ php artisan db:seed --class=SupplierSeeder --force
 `DatabaseSeeder` esegue `SupplierSeeder` anche in produzione, ma limita i
 seeder con utenti e dati dimostrativi agli ambienti non production.
 
+## Email ordini cliente
+
+Ogni ordine viene registrato prima dell'invio email. Il destinatario del
+fornitore e letto dal campo `email` di ICA o IGROUP; puo restare vuoto finche
+non viene comunicato un recapito verificato. L'indirizzo amministrativo comune
+si configura nell'ambiente:
+
+```dotenv
+ORDER_ADMINISTRATION_EMAIL=
+```
+
+Se manca uno dei due destinatari l'ordine resta valido e la consegna email e
+segnalata come `parziale`; se mancano entrambi resta `in_attesa`.
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:

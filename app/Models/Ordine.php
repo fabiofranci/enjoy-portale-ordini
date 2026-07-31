@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Ordine extends Model
@@ -10,9 +11,12 @@ class Ordine extends Model
     protected $table = 'ordini';
 
     protected $fillable = [
-        'user_id','centro_costo_id','stato','riferimento_cliente','note','extra_budget',
-        'totale_lordo','totale_netto','iva_totale','pdf_path',
-        'odoo_lead_id','igroup_sent_at','odoo_synced_at',
+        'user_id', 'centro_costo_id', 'fornitore_id',
+        'cliente_nome', 'cliente_partita_iva', 'centro_costo_nome', 'fornitore_code',
+        'stato', 'riferimento_cliente', 'note', 'extra_budget',
+        'totale_lordo', 'totale_netto', 'iva_totale', 'pdf_path',
+        'email_stato', 'email_sent_at', 'email_recipients',
+        'odoo_lead_id', 'igroup_sent_at', 'odoo_synced_at',
     ];
 
     protected $casts = [
@@ -20,6 +24,8 @@ class Ordine extends Model
         'totale_lordo' => 'decimal:2',
         'totale_netto' => 'decimal:2',
         'iva_totale' => 'decimal:2',
+        'email_sent_at' => 'datetime',
+        'email_recipients' => 'array',
         'odoo_lead_id' => 'integer',
         'igroup_sent_at' => 'datetime',
         'odoo_synced_at' => 'datetime',
@@ -37,14 +43,15 @@ class Ordine extends Model
 
     public function ricalcolaTotali(): void
     {
-        $netto = $this->items->sum('totale_riga_netto');
-        $iva   = $this->items->sum('totale_riga_iva');
-        $lordo = $this->items->sum('totale_riga_lordo');
+        $hasCompleteTaxBreakdown = $this->items->every(
+            static fn (OrdineItem $item): bool => $item->totale_riga_netto !== null
+                && $item->totale_riga_iva !== null
+        );
 
         $this->update([
-            'totale_netto' => $netto,
-            'iva_totale'   => $iva,
-            'totale_lordo' => $lordo,
+            'totale_netto' => $hasCompleteTaxBreakdown ? $this->items->sum('totale_riga_netto') : null,
+            'iva_totale' => $hasCompleteTaxBreakdown ? $this->items->sum('totale_riga_iva') : null,
+            'totale_lordo' => $this->items->sum('totale_riga_lordo'),
         ]);
     }
 
@@ -53,9 +60,13 @@ class Ordine extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function centroCosto()
+    public function centroCosto(): BelongsTo
     {
         return $this->belongsTo(CentroCosto::class);
     }
 
+    public function fornitore(): BelongsTo
+    {
+        return $this->belongsTo(Fornitore::class);
+    }
 }

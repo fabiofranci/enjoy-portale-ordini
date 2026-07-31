@@ -4,9 +4,9 @@ namespace App\Filament\Resources\OrdineResource\Pages;
 
 use App\Filament\Resources\OrdineResource;
 use Filament\Resources\Pages\ViewRecord;
-use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Text;
+use Filament\Schemas\Schema;
 
 class ViewOrdine extends ViewRecord
 {
@@ -24,19 +24,19 @@ class ViewOrdine extends ViewRecord
                         ->label('Creato il')
                         ->dateTime('d/m/Y H:i'),
 
-                    Text::make('user.name')->label('Cliente'),
-                    Text::make('centroCosto.nome')->label('Centro di costo'),
+                    Text::make('cliente_nome')->label('Cliente'),
+                    Text::make('centro_costo_nome')->label('Centro di costo'),
+                    Text::make('fornitore_code')->label('Fornitore'),
                     Text::make('riferimento_cliente')
-                        ->label('Conferma ordine')
+                        ->label('Numero ordine cliente')
                         ->placeholder('-'),
+                    Text::make('email_stato')->label('Stato email'),
                 ]),
 
-            Section::make('Totali')
-                ->columns(3)
+            Section::make('Totale')
+                ->columns(1)
                 ->components([
-                    Text::make('totale_netto')->label('Totale netto')->money('EUR'),
-                    Text::make('iva_totale')->label('IVA')->money('EUR'),
-                    Text::make('totale_lordo')->label('Totale lordo')->money('EUR'),
+                    Text::make('totale_lordo')->label('Totale IVA inclusa')->money('EUR'),
                 ]),
         ]);
     }

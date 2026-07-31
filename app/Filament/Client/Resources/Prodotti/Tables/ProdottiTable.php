@@ -6,6 +6,7 @@ use App\Filament\Client\Resources\Prodotti\Pages\ListProdotti;
 use App\Models\ListinoReferenza;
 use App\Models\ReferenzaPackaging;
 use App\Services\Catalog\CatalogoClienteService;
+use Filament\Actions\Action;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ViewColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -76,7 +77,14 @@ class ProdottiTable
             ->defaultPaginationPageOption(25)
             ->emptyStateHeading(fn (ListProdotti $livewire): string => $livewire->catalogEmptyHeading())
             ->emptyStateDescription(fn (ListProdotti $livewire): string => $livewire->catalogEmptyDescription())
-            ->recordActions([])
+            ->recordActions([
+                Action::make('addToCart')
+                    ->label('Aggiungi al carrello')
+                    ->icon('heroicon-o-shopping-cart')
+                    ->iconButton()
+                    ->tooltip('Aggiungi al carrello')
+                    ->action(fn (ListinoReferenza $record, ListProdotti $livewire): mixed => $livewire->addToCart($record)),
+            ])
             ->bulkActions([]);
     }
 }

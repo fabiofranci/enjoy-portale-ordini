@@ -377,7 +377,7 @@ final class CatalogoClienteTest extends TestCase
         Livewire::actingAs($user)
             ->test(ListProdotti::class)
             ->assertSet('centroCostoId', $this->centroCosto->id)
-            ->assertSee('Ordini in fase di attivazione');
+            ->assertSee('0 articoli disponibili');
     }
 
     public function test_cliente_con_piu_centri_puo_selezionarli_e_la_scelta_persiste_in_sessione(): void
@@ -535,7 +535,7 @@ final class CatalogoClienteTest extends TestCase
         $this->assertSame('Prodotto legacy', $legacyProduct->refresh()->nome);
     }
 
-    public function test_nuovo_catalogo_non_espone_aggiunta_al_carrello_legacy(): void
+    public function test_nuovo_catalogo_espone_aggiunta_al_nuovo_carrello(): void
     {
         $this->catalogPrice('NO-CART');
         $user = $this->clientUser($this->cliente);
@@ -543,8 +543,7 @@ final class CatalogoClienteTest extends TestCase
 
         Livewire::actingAs($user)
             ->test(ListProdotti::class)
-            ->assertSee('Ordini in fase di attivazione')
-            ->assertDontSee('Aggiungi al carrello');
+            ->assertSee('Aggiungi al carrello');
 
         $this->assertArrayNotHasKey('view', ProdottoResource::getPages());
     }

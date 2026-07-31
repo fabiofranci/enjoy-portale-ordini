@@ -23,7 +23,7 @@ final class OrderQuotePdfService
      */
     public function generate(Ordine $ordine): array
     {
-        $ordine->loadMissing(['user.cliente', 'centroCosto', 'items.prodotto']);
+        $ordine->loadMissing(['user.cliente', 'centroCosto', 'fornitore', 'items']);
 
         $fileName = $this->buildFileName($ordine);
         $path = $this->buildStoragePath($ordine, $fileName);
@@ -53,7 +53,7 @@ final class OrderQuotePdfService
             'ordine' => $ordine,
         ])->render();
 
-        $options = new Options();
+        $options = new Options;
         $options->set('defaultFont', 'DejaVu Sans');
         $options->set('isRemoteEnabled', false);
 
@@ -70,7 +70,7 @@ final class OrderQuotePdfService
         $reference = trim((string) ($ordine->riferimento_cliente ?? ''));
         $suffix = $reference !== ''
             ? Str::slug($reference)
-            : 'ordine-' . $ordine->id;
+            : 'ordine-'.$ordine->id;
 
         return sprintf('richiesta-preventivo-ordine-%d-%s.pdf', $ordine->id, $suffix);
     }

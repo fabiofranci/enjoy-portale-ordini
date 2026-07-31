@@ -3,8 +3,8 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Client\Pages\Carrello;
+use App\Filament\Client\Pages\Ordini;
 use App\Filament\Client\Resources\Prodotti\ProdottoResource;
-use App\Http\Controllers\Client\CartController;
 use App\Http\Middleware\EnsureClienteRole;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -22,7 +22,6 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
-use Illuminate\Support\Facades\Route;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class ClientPanelProvider extends PanelProvider
@@ -50,6 +49,10 @@ class ClientPanelProvider extends PanelProvider
                                 ->label('Carrello')
                                 ->icon('heroicon-o-shopping-cart')
                                 ->url(Carrello::getUrl()),
+                            NavigationItem::make()
+                                ->label('I miei ordini')
+                                ->icon('heroicon-o-clipboard-document-list')
+                                ->url(Ordini::getUrl()),
                         ]),
                     NavigationGroup::make()
                         ->label('Catalogo')
@@ -84,19 +87,6 @@ class ClientPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
-            ])
-            ->routes(function () {
-                Route::post('/carrello/update', [\App\Http\Controllers\Client\CartController::class, 'update'])
-                    ->name('pages.carrello.update');
-
-                Route::get('/carrello/add/{prodotto}', [CartController::class, 'add'])
-                    ->name('pages.carrello.add');
-
-                Route::get('/carrello/remove/{id}', [CartController::class, 'remove'])
-                    ->name('pages.carrello.remove');
-
-                Route::post('/carrello/checkout', [CartController::class, 'checkout'])
-                    ->name('pages.carrello.checkout');
-            });
+            ]);
     }
 }

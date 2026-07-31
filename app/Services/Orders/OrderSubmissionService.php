@@ -4,359 +4,232 @@ declare(strict_types=1);
 
 namespace App\Services\Orders;
 
+use App\Models\CentroCosto;
+use App\Models\Fornitore;
+use App\Models\ListinoReferenza;
 use App\Models\Ordine;
 use App\Models\OrdineItem;
-use App\Models\Product;
 use App\Models\User;
-use App\Services\PrezziService;
-use App\Services\Odoo\OdooQuoteRequestService;
-use Illuminate\Support\Collection;
+use App\Services\Catalog\CatalogoClienteService;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 final class OrderSubmissionService
 {
     public function __construct(
+        private readonly CatalogoClienteService $catalogo,
         private readonly OrderQuotePdfService $pdfService,
-        private readonly IgroupOrderMailService $igroupMailService,
-        private readonly OdooQuoteRequestService $odooQuoteRequestService,
-    ) {
-    }
-
-    public function submit(User $user, array $cart, string $confirmationNumber): Ordine
-    {
-        if ($cart === []) {
-            throw ValidationException::withMessages([
-                'cart' => 'Il carrello è vuoto.',
-            ]);
-        }
-
-        $confirmationNumber = $this->normalizeConfirmationNumber($confirmationNumber);
-        $this->validateCartPrices($user, $cart);
-        $this->igroupMailService->ensureConfigured();
-
-        $ordine = DB::transaction(function () use ($user, $cart, $confirmationNumber): Ordine {
-            return $this->persistOrder($user, $cart, $confirmationNumber);
-        });
-
-        $ordine->loadMissing(['user.cliente', 'centroCosto', 'items.prodotto']);
-
-        $pdf = $this->pdfService->generate($ordine);
-        $this->igroupMailService->send($ordine, $pdf['path'], $pdf['filename']);
-        $this->odooQuoteRequestService->sync($ordine, $pdf['content'], $pdf['filename']);
-
-        $ordine->forceFill([
-            'stato' => 'inviato',
-        ])->save();
-
-        Log::info('Order submission workflow completed', [
-            'ordine_id' => $ordine->id,
-            'confirmation_number' => $confirmationNumber,
-        ]);
-
-        return $ordine->fresh(['user.cliente', 'centroCosto', 'items.prodotto']) ?? $ordine;
-    }
-
-    private function persistOrder(User $user, array $cart, string $confirmationNumber): Ordine
-    {
-        $existingOrder = Ordine::query()
-            ->where('user_id', $user->id)
-            ->where('riferimento_cliente', $confirmationNumber)
-            ->latest('id')
-            ->lockForUpdate()
-            ->first();
-
-        if ($existingOrder !== null) {
-            return $this->reuseExistingOrder($existingOrder, $cart, $user, $confirmationNumber);
-        }
-
-        $ordine = Ordine::create([
-            'user_id' => $user->id,
-            'centro_costo_id' => $this->resolveCentroCostoId($user),
-            'stato' => 'bozza',
-            'riferimento_cliente' => $confirmationNumber,
-            'note' => null,
-            'extra_budget' => false,
-            'totale_lordo' => 0,
-            'totale_netto' => 0,
-            'iva_totale' => 0,
-            'pdf_path' => null,
-            'odoo_lead_id' => null,
-            'igroup_sent_at' => null,
-            'odoo_synced_at' => null,
-        ]);
-
-        $this->replaceOrderItems($ordine, $cart, $user);
-
-        return $ordine;
-    }
-
-    private function reuseExistingOrder(Ordine $ordine, array $cart, User $user, string $confirmationNumber): Ordine
-    {
-        if ($ordine->stato !== 'bozza') {
-            throw ValidationException::withMessages([
-                'confirmation_number' => 'Questo numero conferma ordine e\' gia\' stato utilizzato.',
-            ]);
-        }
-
-        if ($this->hasOutboundActivity($ordine)) {
-            Log::warning('Retrying partially submitted order without rewriting items', [
-                'ordine_id' => $ordine->id,
-                'confirmation_number' => $confirmationNumber,
-                'igroup_sent_at' => $ordine->igroup_sent_at?->format('Y-m-d H:i:s'),
-                'odoo_lead_id' => $ordine->odoo_lead_id,
-            ]);
-
-            if (!$ordine->items()->exists()) {
-                throw ValidationException::withMessages([
-                    'confirmation_number' => 'Esiste gia\' un ordine incompleto con questo numero conferma ma senza righe valide. Contatta l\'assistenza.',
-                ]);
-            }
-
-            return $ordine;
-        }
-
-        $ordine->forceFill([
-            'centro_costo_id' => $this->resolveCentroCostoId($user),
-            'riferimento_cliente' => $confirmationNumber,
-            'pdf_path' => null,
-        ])->save();
-
-        $this->replaceOrderItems($ordine, $cart, $user);
-
-        return $ordine;
-    }
-
-    private function replaceOrderItems(Ordine $ordine, array $cart, User $user): void
-    {
-        $products = $this->loadProductsForCart($cart);
-        $rows = $this->buildOrderItemRows($ordine, $cart, $products, $user);
-
-        $ordine->items()->delete();
-
-        if ($rows !== []) {
-            OrdineItem::query()->insert($rows);
-        }
-
-        $ordine->unsetRelation('items');
-        $ordine->load('items');
-        $ordine->ricalcolaTotali();
-    }
+        private readonly SupplierOrderMailService $mailService,
+    ) {}
 
     /**
-     * @param  array<int|string, array<string, mixed>>  $cart
-     * @return Collection<int, Product>
+     * @param  array<string, array<string, mixed>>  $cartItems
      */
-    private function loadProductsForCart(array $cart): Collection
-    {
-        $productIds = collect($cart)
-            ->pluck('prodotto_id')
-            ->filter(static fn (mixed $value): bool => is_numeric($value) && (int) $value > 0)
-            ->map(static fn (mixed $value): int => (int) $value)
-            ->unique()
-            ->values();
-
-        if ($productIds->isEmpty()) {
-            throw ValidationException::withMessages([
-                'cart' => 'Il carrello non contiene prodotti validi.',
-            ]);
-        }
-
-        $products = Product::query()
-            ->with('packagings')
-            ->whereIn('id', $productIds)
-            ->get(['id', 'unita_misura', 'disponibile'])
-            ->keyBy('id');
-
-        $missingProductIds = $productIds
-            ->reject(static fn (int $productId): bool => $products->has($productId))
-            ->values()
-            ->all();
-
-        if ($missingProductIds !== []) {
-            throw ValidationException::withMessages([
-                'cart' => 'Alcuni prodotti del carrello non sono piu\' disponibili.',
-            ]);
-        }
-
-        return $products;
-    }
-
-    /**
-     * @param  array<int|string, array<string, mixed>>  $cart
-     * @param  Collection<int, Product>  $products
-     * @return array<int, array<string, int|float|string|null>>
-     */
-    private function buildOrderItemRows(Ordine $ordine, array $cart, Collection $products, User $user): array
-    {
-        $now = now();
-        $rows = [];
-
-        foreach ($cart as $item) {
-            $productId = $this->normalizeRequiredProductId($item['prodotto_id'] ?? null);
-            $product = $products->get($productId);
-
-            if (!$product instanceof Product) {
-                throw ValidationException::withMessages([
-                    'cart' => 'Il carrello contiene un prodotto non valido.',
-                ]);
-            }
-
-            $quantity = max(1, (int) ($item['quantita'] ?? 1));
-            $unit = $this->normalizeUnit($item['unita'] ?? null, $product->unita_misura);
-            $pricing = $this->validPricingForProduct($product, $user);
-            $grossUnitPrice = $this->grossUnitPriceForUnit($product, $unit, $pricing);
-            $discount = $this->normalizeDecimal($pricing['sconto_percentuale'] ?? 0);
-            $ivaPercentage = $this->normalizeDecimal($pricing['iva_percentuale'] ?? 22);
-
-            $grossDiscountedUnitPrice = round($grossUnitPrice * (1 - ($discount / 100)), 4);
-            $grossLineTotal = round($grossDiscountedUnitPrice * $quantity, 2);
-            $netLineTotal = round($grossLineTotal / (1 + ($ivaPercentage / 100)), 2);
-            $taxLineTotal = round($grossLineTotal - $netLineTotal, 2);
-
-            $rows[] = [
-                'ordine_id' => $ordine->id,
-                'prodotto_id' => $productId,
-                'unita' => $unit,
-                'quantita' => $quantity,
-                'prezzo_unitario_lordo' => $grossUnitPrice,
-                'sconto_percentuale' => $discount,
-                'iva_percentuale' => $ivaPercentage,
-                'totale_riga_netto' => $netLineTotal,
-                'totale_riga_iva' => $taxLineTotal,
-                'totale_riga_lordo' => $grossLineTotal,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ];
-        }
-
-        return $rows;
-    }
-
-    private function validateCartPrices(User $user, array $cart): void
-    {
-        $products = $this->loadProductsForCart($cart);
-
-        foreach ($cart as $item) {
-            $productId = $this->normalizeRequiredProductId($item['prodotto_id'] ?? null);
-            $product = $products->get($productId);
-
-            if (!$product instanceof Product) {
-                throw ValidationException::withMessages([
-                    'cart' => 'Il carrello contiene un prodotto non valido.',
-                ]);
-            }
-
-            $unit = $this->normalizeUnit($item['unita'] ?? null, $product->unita_misura);
-            $pricing = $this->validPricingForProduct($product, $user);
-            $this->grossUnitPriceForUnit($product, $unit, $pricing);
-        }
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function validPricingForProduct(Product $product, User $user): array
-    {
-        if ($product->disponibile === false) {
-            throw ValidationException::withMessages([
-                'cart' => 'Il carrello contiene un prodotto non disponibile.',
-            ]);
-        }
-
-        $pricing = PrezziService::prezzoVisibile($product, $user);
-
-        if (($pricing['ordinabile'] ?? false) !== true || ($pricing['prezzo'] ?? null) === null) {
-            throw ValidationException::withMessages([
-                'cart' => 'Il carrello contiene un prodotto non ordinabile o senza prezzo valido.',
-            ]);
-        }
-
-        return $pricing;
-    }
-
-    /**
-     * @param  array<string, mixed>  $pricing
-     */
-    private function grossUnitPriceForUnit(Product $product, string $unit, array $pricing): float
-    {
-        $grossUnitPrice = $this->normalizeDecimal($pricing['prezzo_lordo'] ?? $pricing['prezzo'] ?? 0);
-
-        if ($grossUnitPrice <= 0.0) {
-            throw ValidationException::withMessages([
-                'cart' => 'Il carrello contiene un prodotto senza prezzo valido.',
-            ]);
-        }
-
-        if ($unit === ($product->unita_misura ?? $unit)) {
-            return $grossUnitPrice;
-        }
+    public function submit(
+        User $user,
+        int $centroCostoId,
+        array $cartItems,
+        string $customerReference,
+        ?string $notes = null,
+    ): Ordine {
+        $customerReference = $this->normalizeReference($customerReference);
+        $notes = $this->normalizeNotes($notes);
+        [$centroCosto, $supplier, $prices, $quantities] = $this->validatedOrderData(
+            $user,
+            $centroCostoId,
+            $cartItems,
+        );
 
         try {
-            return round($product->priceForUnit($unit, $grossUnitPrice), 4);
-        } catch (\Throwable) {
+            $ordine = DB::transaction(function () use (
+                $user,
+                $centroCosto,
+                $supplier,
+                $prices,
+                $quantities,
+                $customerReference,
+                $notes,
+            ): Ordine {
+                if (Ordine::query()
+                    ->where('user_id', $user->getKey())
+                    ->where('riferimento_cliente', $customerReference)
+                    ->lockForUpdate()
+                    ->exists()) {
+                    throw ValidationException::withMessages([
+                        'confirmation_number' => 'Questo numero ordine cliente e gia stato utilizzato.',
+                    ]);
+                }
+
+                $ordine = Ordine::query()->create([
+                    'user_id' => $user->getKey(),
+                    'centro_costo_id' => $centroCosto->getKey(),
+                    'fornitore_id' => $supplier->getKey(),
+                    'cliente_nome' => $user->cliente?->nome ?? $user->name,
+                    'cliente_partita_iva' => $user->cliente?->partita_iva,
+                    'centro_costo_nome' => $centroCosto->nome,
+                    'fornitore_code' => $supplier->code,
+                    'stato' => 'inviato',
+                    'riferimento_cliente' => $customerReference,
+                    'note' => $notes,
+                    'extra_budget' => false,
+                    'totale_lordo' => 0,
+                    'totale_netto' => null,
+                    'iva_totale' => null,
+                    'pdf_path' => null,
+                    'email_stato' => 'in_attesa',
+                    'email_sent_at' => null,
+                    'email_recipients' => null,
+                ]);
+
+                $this->createItems($ordine, $prices, $quantities, $supplier);
+                $ordine->load('items');
+                $ordine->ricalcolaTotali();
+
+                return $ordine;
+            });
+        } catch (UniqueConstraintViolationException) {
             throw ValidationException::withMessages([
-                'cart' => 'Il carrello contiene un confezionamento non valido.',
+                'confirmation_number' => 'Questo numero ordine cliente e gia stato utilizzato.',
             ]);
         }
-    }
 
-    private function hasOutboundActivity(Ordine $ordine): bool
-    {
-        return $ordine->igroup_sent_at !== null
-            || ($ordine->odoo_lead_id !== null && $ordine->odoo_lead_id > 0)
-            || $ordine->odoo_synced_at !== null;
-    }
+        $ordine->loadMissing(['user.cliente', 'centroCosto', 'fornitore', 'items']);
 
-    private function normalizeConfirmationNumber(string $confirmationNumber): string
-    {
-        $confirmationNumber = trim($confirmationNumber);
+        try {
+            $pdf = $this->pdfService->generate($ordine);
+            $this->mailService->send($ordine, $pdf['path'], $pdf['filename']);
+        } catch (Throwable $exception) {
+            $ordine->forceFill(['email_stato' => 'errore'])->save();
 
-        if ($confirmationNumber === '' || !preg_match('/^[0-9]+$/', $confirmationNumber)) {
-            throw ValidationException::withMessages([
-                'confirmation_number' => 'Inserisci un numero di conferma ordine valido.',
+            Log::error('Order email delivery failed after persistence', [
+                'ordine_id' => $ordine->getKey(),
+                'exception' => $exception,
             ]);
         }
 
-        return $confirmationNumber;
-    }
-
-    private function normalizeRequiredProductId(mixed $value): int
-    {
-        if (is_numeric($value) && (int) $value > 0) {
-            return (int) $value;
-        }
-
-        throw ValidationException::withMessages([
-            'cart' => 'Il carrello contiene un prodotto senza identificativo valido.',
+        Log::info('Customer binding order persisted', [
+            'ordine_id' => $ordine->getKey(),
+            'supplier_code' => $supplier->code,
+            'email_stato' => $ordine->fresh()?->email_stato,
         ]);
+
+        return $ordine->fresh(['user.cliente', 'centroCosto', 'fornitore', 'items']) ?? $ordine;
     }
 
-    private function normalizeUnit(mixed $value, ?string $fallbackUnit): string
-    {
-        $unit = trim((string) ($value ?? $fallbackUnit ?? 'NR'));
-
-        return $unit !== '' ? $unit : 'NR';
-    }
-
-    private function normalizeDecimal(mixed $value): float
-    {
-        if (is_numeric($value)) {
-            return round((float) $value, 4);
+    /**
+     * @param  array<string, array<string, mixed>>  $cartItems
+     * @return array{0:CentroCosto,1:Fornitore,2:\Illuminate\Support\Collection<int, ListinoReferenza>,3:array<int, int>}
+     */
+    private function validatedOrderData(
+        User $user,
+        int $centroCostoId,
+        array $cartItems,
+    ): array {
+        if ($cartItems === []) {
+            throw ValidationException::withMessages(['cart' => 'Il carrello e vuoto.']);
         }
 
-        return 0.0;
-    }
+        $centroCosto = $this->catalogo->centroAccessibile($user, $centroCostoId);
+        $supplier = $centroCosto->fornitoreEffettivo();
 
-    private function resolveCentroCostoId(User $user): ?int
-    {
-        $centroCostoId = $user->centro_costo_default_id ?? $user->centro_costo_id ?? null;
-
-        if (is_numeric($centroCostoId) && (int) $centroCostoId > 0) {
-            return (int) $centroCostoId;
+        if (! $supplier instanceof Fornitore) {
+            throw ValidationException::withMessages([
+                'cart' => 'Il centro di costo non ha un fornitore configurato.',
+            ]);
         }
 
-        return null;
+        $quantities = [];
+
+        foreach ($cartItems as $item) {
+            $priceId = $item['listino_referenza_id'] ?? null;
+            $quantity = $item['quantita'] ?? null;
+
+            if (! is_numeric($priceId) || (int) $priceId < 1 || ! is_numeric($quantity) || (int) $quantity < 1) {
+                throw ValidationException::withMessages(['cart' => 'Il carrello contiene dati non validi.']);
+            }
+
+            $quantities[(int) $priceId] = min(9999, (int) $quantity);
+        }
+
+        if (count($quantities) !== count($cartItems)) {
+            throw ValidationException::withMessages(['cart' => 'Il carrello contiene righe duplicate.']);
+        }
+
+        $prices = $this->catalogo->query($centroCosto)
+            ->whereIn('listino_referenze.id', array_keys($quantities))
+            ->get()
+            ->keyBy('id');
+
+        if ($prices->count() !== count($quantities)) {
+            throw ValidationException::withMessages([
+                'cart' => 'Uno o piu articoli non sono piu disponibili nel listino del centro.',
+            ]);
+        }
+
+        return [$centroCosto, $supplier, $prices, $quantities];
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, ListinoReferenza>  $prices
+     * @param  array<int, int>  $quantities
+     */
+    private function createItems(
+        Ordine $ordine,
+        \Illuminate\Support\Collection $prices,
+        array $quantities,
+        Fornitore $supplier,
+    ): void {
+        foreach ($prices as $price) {
+            $reference = $price->referenza;
+            $listino = $price->listino;
+
+            if ($reference === null || $listino === null) {
+                throw ValidationException::withMessages(['cart' => 'Una referenza non contiene i dati richiesti.']);
+            }
+
+            $item = new OrdineItem([
+                'prodotto_id' => null,
+                'listino_referenza_id' => $price->getKey(),
+                'fornitore_code' => $supplier->code,
+                'supplier_code' => $reference->supplier_code,
+                'customer_article_code' => $reference->customer_article_code,
+                'descrizione' => $reference->descrizione,
+                'listino_nome' => $listino->nome_listino,
+                'unita' => $price->price_unit ?: ($reference->sales_unit ?: 'NR'),
+                'quantita' => $quantities[(int) $price->getKey()],
+                'prezzo_unitario_lordo' => $price->prezzo,
+                'sconto_percentuale' => 0,
+                'iva_percentuale' => $price->iva_percentuale,
+            ]);
+            $item->calcolaTotali();
+            $ordine->items()->save($item);
+        }
+    }
+
+    private function normalizeReference(string $reference): string
+    {
+        $reference = trim($reference);
+
+        if ($reference === '' || mb_strlen($reference) > 50 || preg_match('/[\r\n]/', $reference)) {
+            throw ValidationException::withMessages([
+                'confirmation_number' => 'Inserisci un numero ordine cliente valido, massimo 50 caratteri.',
+            ]);
+        }
+
+        return $reference;
+    }
+
+    private function normalizeNotes(?string $notes): ?string
+    {
+        $notes = trim((string) $notes);
+
+        if (mb_strlen($notes) > 1000) {
+            throw ValidationException::withMessages(['notes' => 'Le note non possono superare 1000 caratteri.']);
+        }
+
+        return $notes !== '' ? $notes : null;
     }
 }

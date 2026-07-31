@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="utf-8">
-    <title>Richiesta preventivo ordine #{{ $ordine->id }}</title>
+    <title>Ordine cliente - richiesta preventivo #{{ $ordine->id }}</title>
     <style>
         body {
             font-family: DejaVu Sans, sans-serif;
@@ -59,8 +59,9 @@
     </style>
 </head>
 <body>
-    <h1>Richiesta preventivo</h1>
+    <h1>Ordine cliente - richiesta preventivo</h1>
     <div class="muted">Documento generato dal Portale Clienti Enjoy</div>
+    <p><strong>I prezzi sono concordati e IVA inclusa. La richiesta costituisce un ordine impegnativo del cliente.</strong></p>
 
     <h2>Dati ordine</h2>
     <table class="meta-table">
@@ -78,11 +79,11 @@
         </tr>
         <tr>
             <td class="meta-label">Cliente</td>
-            <td>{{ $ordine->user?->cliente?->nome ?? $ordine->user?->name ?? '-' }}</td>
+            <td>{{ $ordine->cliente_nome ?? '-' }}</td>
         </tr>
         <tr>
             <td class="meta-label">Partita IVA</td>
-            <td>{{ $ordine->user?->cliente?->partita_iva ?? '-' }}</td>
+            <td>{{ $ordine->cliente_partita_iva ?? '-' }}</td>
         </tr>
         <tr>
             <td class="meta-label">Contatto</td>
@@ -98,34 +99,48 @@
         </tr>
         <tr>
             <td class="meta-label">Centro di costo</td>
-            <td>{{ $ordine->centroCosto?->nome ?? '-' }}</td>
+            <td>{{ $ordine->centro_costo_nome ?? '-' }}</td>
         </tr>
+        <tr>
+            <td class="meta-label">Fornitore</td>
+            <td>{{ $ordine->fornitore_code ?? '-' }}</td>
+        </tr>
+        @if ($ordine->note)
+            <tr>
+                <td class="meta-label">Note</td>
+                <td>{{ $ordine->note }}</td>
+            </tr>
+        @endif
     </table>
 
     <h2>Righe richiesta</h2>
     <table class="items-table">
         <thead>
             <tr>
-                <th style="width: 18%;">Codice</th>
-                <th>Prodotto</th>
-                <th style="width: 14%;">UDM</th>
-                <th style="width: 14%;" class="text-right">Quantita</th>
+                <th style="width: 15%;">Codice</th>
+                <th>Articolo</th>
+                <th style="width: 10%;">UDM</th>
+                <th style="width: 10%;" class="text-right">Quantita</th>
+                <th style="width: 15%;" class="text-right">Prezzo IVA incl.</th>
+                <th style="width: 15%;" class="text-right">Totale</th>
             </tr>
         </thead>
         <tbody>
             @foreach ($ordine->items as $item)
                 <tr>
-                    <td>{{ $item->prodotto?->codice ?? '-' }}</td>
-                    <td>{{ $item->prodotto?->nome ?? 'Prodotto non disponibile' }}</td>
-                    <td>{{ $item->unita ?? $item->prodotto?->unita_misura ?? 'NR' }}</td>
+                    <td>{{ $item->supplier_code ?? '-' }}</td>
+                    <td>{{ $item->descrizione ?? 'Articolo non disponibile' }}</td>
+                    <td>{{ $item->unita ?? 'NR' }}</td>
                     <td class="text-right">{{ (int) $item->quantita }}</td>
+                    <td class="text-right">EUR {{ number_format((float) $item->prezzo_unitario_lordo, 2, ',', '.') }}</td>
+                    <td class="text-right">EUR {{ number_format((float) $item->totale_riga_lordo, 2, ',', '.') }}</td>
                 </tr>
             @endforeach
         </tbody>
     </table>
 
-    <p class="muted" style="margin-top: 20px;">
-        Documento privo di prezzi come da flusso di richiesta preventivo.
+    <p style="margin-top: 20px; text-align: right; font-size: 14px;">
+        <strong>Totale IVA inclusa: EUR {{ number_format((float) $ordine->totale_lordo, 2, ',', '.') }}</strong>
     </p>
 </body>
 </html>

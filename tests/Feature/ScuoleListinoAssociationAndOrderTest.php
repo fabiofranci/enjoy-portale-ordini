@@ -6,16 +6,11 @@ use App\Models\Categoria;
 use App\Models\CentroCosto;
 use App\Models\Cliente;
 use App\Models\Listino;
-use App\Models\Ordine;
 use App\Models\Product;
 use App\Models\User;
-use App\Services\CartService;
-use App\Services\Orders\OrderSubmissionService;
 use App\Services\PrezziService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
-use ReflectionClass;
 use Tests\TestCase;
 
 class ScuoleListinoAssociationAndOrderTest extends TestCase
@@ -56,63 +51,6 @@ class ScuoleListinoAssociationAndOrderTest extends TestCase
         $this->assertSame($setup['listino']->id, $pricing['listino_id']);
         $this->assertTrue($pricing['ordinabile']);
         $this->assertSame(10.0, $pricing['prezzo']);
-    }
-
-    public function test_cart_service_rejects_non_orderable_product(): void
-    {
-        $setup = $this->scuoleSetup(ordinabile: false, price: null, reason: 'prezzo_ref');
-        $setup['centroCosto']->listini()->syncWithoutDetaching([$setup['listino']->id]);
-        PrezziService::clearCaches();
-
-        $this->expectException(ValidationException::class);
-
-        CartService::addProduct($setup['user'], $setup['product']->id);
-    }
-
-    public function test_order_submission_rejects_non_orderable_product_before_external_services(): void
-    {
-        $setup = $this->scuoleSetup(ordinabile: false, price: null, reason: 'prezzo_trattini');
-        $setup['centroCosto']->listini()->syncWithoutDetaching([$setup['listino']->id]);
-        PrezziService::clearCaches();
-
-        $service = $this->submissionServiceWithoutConstructor();
-
-        $this->expectException(ValidationException::class);
-
-        $service->submit($setup['user'], [[
-            'prodotto_id' => $setup['product']->id,
-            'quantita' => 1,
-            'prezzo_unitario' => 0.01,
-        ]], '12345');
-    }
-
-    public function test_order_submission_recalculates_price_server_side(): void
-    {
-        $setup = $this->scuoleSetup(price: 10);
-        $setup['centroCosto']->listini()->syncWithoutDetaching([$setup['listino']->id]);
-        PrezziService::clearCaches();
-
-        $service = $this->submissionServiceWithoutConstructor();
-        $method = (new ReflectionClass(OrderSubmissionService::class))->getMethod('persistOrder');
-        $method->setAccessible(true);
-
-        /** @var Ordine $ordine */
-        $ordine = $method->invoke($service, $setup['user'], [[
-            'prodotto_id' => $setup['product']->id,
-            'quantita' => 2,
-            'prezzo_unitario' => 0.01,
-            'sconto_percentuale' => 99,
-            'iva_percentuale' => 4,
-        ]], '98765');
-
-        $ordine->load('items');
-        $item = $ordine->items->first();
-
-        $this->assertNotNull($item);
-        $this->assertSame('10.0000', number_format((float) $item->prezzo_unitario_lordo, 4, '.', ''));
-        $this->assertSame('0.00', number_format((float) $item->sconto_percentuale, 2, '.', ''));
-        $this->assertSame('22.00', number_format((float) $item->iva_percentuale, 2, '.', ''));
-        $this->assertSame('20.00', number_format((float) $ordine->totale_lordo, 2, '.', ''));
     }
 
     /**
@@ -168,13 +106,5 @@ class ScuoleListinoAssociationAndOrderTest extends TestCase
         PrezziService::clearCaches();
 
         return compact('cliente', 'centroCosto', 'listino', 'categoria', 'product', 'user');
-    }
-
-    private function submissionServiceWithoutConstructor(): OrderSubmissionService
-    {
-        /** @var OrderSubmissionService $service */
-        $service = (new ReflectionClass(OrderSubmissionService::class))->newInstanceWithoutConstructor();
-
-        return $service;
     }
 }

@@ -173,6 +173,7 @@ final class CatalogoClienteService
             ->where('listino_referenze.attivo', true)
             ->where('listino_referenze.ordinabile', true)
             ->whereNotNull('listino_referenze.prezzo')
+            ->where('listino_referenze.prezzo', '>', 0)
             ->where('referenze_fornitore.attivo', true)
             ->where('referenze_fornitore.ordinabile', true)
             ->whereColumn('referenze_fornitore.fornitore_id', 'Listini.fornitore_id')

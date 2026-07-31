@@ -6,10 +6,10 @@ namespace App\Mail;
 
 use App\Models\Ordine;
 use Illuminate\Bus\Queueable;
+use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
-use Illuminate\Mail\Mailable;
 
 final class OrderQuoteRequestMail extends Mailable
 {
@@ -19,18 +19,17 @@ final class OrderQuoteRequestMail extends Mailable
         public readonly Ordine $ordine,
         private readonly string $pdfPath,
         private readonly string $pdfFileName,
-    ) {
-    }
+    ) {}
 
     public function envelope(): Envelope
     {
         $reference = trim((string) ($this->ordine->riferimento_cliente ?? ''));
         $subjectSuffix = $reference !== ''
-            ? 'Conferma ' . $reference
-            : 'Ordine ' . $this->ordine->id;
+            ? 'Conferma '.$reference
+            : 'Ordine '.$this->ordine->id;
 
         return new Envelope(
-            subject: 'Richiesta preventivo ' . $subjectSuffix,
+            subject: 'Ordine cliente - richiesta preventivo '.$subjectSuffix,
         );
     }
 

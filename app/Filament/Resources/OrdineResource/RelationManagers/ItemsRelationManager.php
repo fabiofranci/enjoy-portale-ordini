@@ -3,8 +3,8 @@
 namespace App\Filament\Resources\OrdineResource\RelationManagers;
 
 use Filament\Resources\RelationManagers\RelationManager;
-use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 
 class ItemsRelationManager extends RelationManager
 {
@@ -16,8 +16,11 @@ class ItemsRelationManager extends RelationManager
     {
         return $table
             ->columns([
-                TextColumn::make('prodotto.nome')
-                    ->label('Prodotto')
+                TextColumn::make('supplier_code')
+                    ->label('Codice'),
+
+                TextColumn::make('descrizione')
+                    ->label('Articolo')
                     ->wrap(),
 
                 TextColumn::make('quantita')
@@ -29,19 +32,11 @@ class ItemsRelationManager extends RelationManager
                     ->alignCenter(),
 
                 TextColumn::make('prezzo_unitario_lordo')
-                    ->label('Prezzo unitario')
-                    ->money('EUR'),
-
-                TextColumn::make('totale_riga_netto')
-                    ->label('Netto')
-                    ->money('EUR'),
-
-                TextColumn::make('totale_riga_iva')
-                    ->label('IVA')
+                    ->label('Prezzo IVA incl.')
                     ->money('EUR'),
 
                 TextColumn::make('totale_riga_lordo')
-                    ->label('Totale')
+                    ->label('Totale IVA incl.')
                     ->money('EUR')
                     ->weight('bold'),
             ])

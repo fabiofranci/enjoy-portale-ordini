@@ -8,9 +8,11 @@ use App\Models\ListinoReferenza;
 use App\Models\User;
 use App\Services\Catalog\CatalogoClienteService;
 use App\Services\Catalog\Exceptions\CatalogoClienteIncoerenteException;
+use App\Services\Orders\CatalogCartService;
 use DomainException;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
@@ -44,6 +46,13 @@ class ListProdotti extends ListRecords
             if ($centri->count() === 1) {
                 $this->centroCostoId = (int) $centri->firstOrFail()->getKey();
             }
+        }
+
+        $cartService = app(CatalogCartService::class);
+
+        if (! $cartService->isEmpty() && $cartService->selectedCenterId() !== null) {
+            $this->centroCostoId = $cartService->selectedCenterId();
+            $service->centroAccessibile($user, $this->centroCostoId);
         }
 
         if ($this->centroCostoId !== null) {
@@ -94,7 +103,7 @@ class ListProdotti extends ListRecords
                 $status .= ' Alcuni listini assegnati non sono al momento disponibili.';
             }
 
-            return $status.' Ordini in fase di attivazione.';
+            return $status;
         } catch (CatalogoClienteIncoerenteException|DomainException) {
             return 'Il catalogo non e temporaneamente disponibile. Contatta l\'assistenza.';
         }
@@ -179,11 +188,49 @@ class ListProdotti extends ListRecords
                 ->action(function (array $data): void {
                     $centroCostoId = $this->validCenterId($data['centro_costo_id'] ?? null);
                     $this->catalogService()->centroAccessibile($this->user(), $centroCostoId);
+
+                    $cartService = app(CatalogCartService::class);
+
+                    if (! $cartService->isEmpty() && $cartService->selectedCenterId() !== $centroCostoId) {
+                        Notification::make()
+                            ->title('Centro di costo non modificato')
+                            ->body('Svuota il carrello prima di selezionare un altro centro di costo.')
+                            ->warning()
+                            ->send();
+
+                        return;
+                    }
+
                     $this->centroCostoId = $centroCostoId;
                     session()->put(self::SESSION_KEY, $centroCostoId);
                     $this->resetTable();
                 }),
         ];
+    }
+
+    public function addToCart(ListinoReferenza $record): void
+    {
+        $centroCosto = $this->selectedCentroCosto();
+
+        if ($centroCosto === null) {
+            Notification::make()
+                ->title('Seleziona un centro di costo')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        app(CatalogCartService::class)->add(
+            $this->user(),
+            (int) $centroCosto->getKey(),
+            (int) $record->getKey(),
+        );
+
+        Notification::make()
+            ->title('Articolo aggiunto al carrello')
+            ->success()
+            ->send();
     }
 
     private function selectedCentroCosto(): ?CentroCosto

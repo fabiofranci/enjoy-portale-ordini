@@ -46,9 +46,8 @@ return [
         'quote_request_user_id' => env('ODOO_QUOTE_REQUEST_USER_ID'),
     ],
 
-    'igroup' => [
-        'quote_request_to' => env('IGROUP_QUOTE_REQUEST_TO'),
-        'quote_request_cc' => env('IGROUP_QUOTE_REQUEST_CC'),
+    'orders' => [
+        'administration_email' => env('ORDER_ADMINISTRATION_EMAIL'),
     ],
 
 ];
