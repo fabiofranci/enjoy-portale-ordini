@@ -22,6 +22,7 @@ class ListinoReferenza extends Model
         'sconto_percentuale',
         'iva_percentuale',
         'prezzo_cartone',
+        'attivo',
         'ordinabile',
         'motivo_non_ordinabile',
         'modificato_manualmente',
@@ -34,6 +35,7 @@ class ListinoReferenza extends Model
         'sconto_percentuale' => 'decimal:5',
         'iva_percentuale' => 'decimal:5',
         'prezzo_cartone' => 'decimal:5',
+        'attivo' => 'boolean',
         'ordinabile' => 'boolean',
         'modificato_manualmente' => 'boolean',
     ];

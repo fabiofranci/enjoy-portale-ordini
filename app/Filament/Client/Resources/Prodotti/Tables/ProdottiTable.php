@@ -1,13 +1,16 @@
 <?php
 
-// app/Filament/Client/Resources/Prodotti/Tables/ProdottiTable.php
 namespace App\Filament\Client\Resources\Prodotti\Tables;
 
-use App\Models\Product;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\ImageColumn;
+use App\Filament\Client\Resources\Prodotti\Pages\ListProdotti;
+use App\Models\ListinoReferenza;
+use App\Models\ReferenzaPackaging;
+use App\Services\Catalog\CatalogoClienteService;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ViewColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class ProdottiTable
 {
@@ -15,19 +18,65 @@ class ProdottiTable
     {
         return $table
             ->columns([
-                ImageColumn::make('immagine')
+                ViewColumn::make('referenza.immagine_path')
                     ->label('Immagine')
-                    ->disk('public')
-                    ->height(60)
-                    ->defaultImageUrl(url('/images/placeholder.png')),
-
-                TextColumn::make('nome')->label('Nome')->searchable()->sortable(),
-                TextColumn::make('codice')->label('Codice')->searchable(),
-                TextColumn::make('categoria.nome')->label('Categoria')->sortable(),
-
-                ViewColumn::make('unita_prezzo')
-                    ->label('Unita e prezzo')
-                    ->view('filament.client.prodotti.columns.unita-prezzo'),
-            ]);
+                    ->view('filament.client.prodotti.columns.catalogo-immagine'),
+                TextColumn::make('referenza.descrizione')
+                    ->label('Descrizione')
+                    ->description(fn (ListinoReferenza $record): ?string => $record->referenza->descrizione_estesa)
+                    ->wrap(),
+                TextColumn::make('referenza.supplier_code')
+                    ->label('Codice fornitore')
+                    ->copyable(),
+                TextColumn::make('referenza.customer_article_code')
+                    ->label('Codice cliente')
+                    ->placeholder('-'),
+                TextColumn::make('referenza.fornitore.code')
+                    ->label('Fornitore')
+                    ->description(fn (ListinoReferenza $record): ?string => $record->referenza->fornitore->nome),
+                TextColumn::make('prezzo')
+                    ->label('Prezzo')
+                    ->money('EUR')
+                    ->description(fn (ListinoReferenza $record): ?string => $record->price_unit),
+                TextColumn::make('referenza.sales_unit')
+                    ->label('Unita vendita')
+                    ->placeholder('-'),
+                TextColumn::make('referenza.packagings')
+                    ->label('Packaging')
+                    ->state(fn (ListinoReferenza $record): array => $record->referenza->packagings
+                        ->map(static fn (ReferenzaPackaging $packaging): string => sprintf(
+                            '1 %s = %s %s',
+                            $packaging->unita_contenitore,
+                            (string) (float) $packaging->quantita,
+                            $packaging->unita_contenuta,
+                        ))
+                        ->all())
+                    ->listWithLineBreaks()
+                    ->bulleted(),
+                TextColumn::make('referenza.categoria')
+                    ->label('Categoria')
+                    ->placeholder('-')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('listino.nome_listino')
+                    ->label('Listino')
+                    ->toggleable(isToggledHiddenByDefault: true),
+            ])
+            ->filters([
+                SelectFilter::make('categoria')
+                    ->label('Categoria')
+                    ->options(fn (ListProdotti $livewire): array => $livewire->categoryOptions())
+                    ->query(fn (Builder $query, array $data): Builder => app(CatalogoClienteService::class)
+                        ->applyCategory($query, $data['value'] ?? null)),
+            ])
+            ->searchable()
+            ->searchUsing(fn (Builder $query, mixed $search): Builder => app(CatalogoClienteService::class)
+                ->applySearch($query, $search))
+            ->searchPlaceholder('Descrizione o codice')
+            ->paginationPageOptions([10, 25, 50])
+            ->defaultPaginationPageOption(25)
+            ->emptyStateHeading(fn (ListProdotti $livewire): string => $livewire->catalogEmptyHeading())
+            ->emptyStateDescription(fn (ListProdotti $livewire): string => $livewire->catalogEmptyDescription())
+            ->recordActions([])
+            ->bulkActions([]);
     }
 }

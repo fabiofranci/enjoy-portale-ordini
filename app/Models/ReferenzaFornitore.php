@@ -22,6 +22,7 @@ class ReferenzaFornitore extends Model
         'descrizione_estesa',
         'categoria',
         'sales_unit',
+        'attivo',
         'ordinabile',
         'motivo_non_ordinabile',
         'immagine_path',
@@ -32,6 +33,7 @@ class ReferenzaFornitore extends Model
     ];
 
     protected $casts = [
+        'attivo' => 'boolean',
         'ordinabile' => 'boolean',
         'source_metadata' => 'array',
     ];
@@ -53,8 +55,12 @@ class ReferenzaFornitore extends Model
 
     public function getImmagineUrlAttribute(): ?string
     {
-        return $this->immagine_path !== null
-            ? Storage::disk('public')->url($this->immagine_path)
-            : null;
+        if ($this->immagine_path === null) {
+            return null;
+        }
+
+        $path = parse_url(Storage::disk('public')->url($this->immagine_path), PHP_URL_PATH);
+
+        return is_string($path) ? '/'.ltrim($path, '/') : null;
     }
 }
