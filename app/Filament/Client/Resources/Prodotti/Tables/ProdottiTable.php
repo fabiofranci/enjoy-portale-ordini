@@ -54,7 +54,7 @@ class ProdottiTable
                         ->all())
                     ->listWithLineBreaks()
                     ->bulleted(),
-                TextColumn::make('referenza.categoria')
+                TextColumn::make('referenza.categorie.nome')
                     ->label('Categoria')
                     ->placeholder('-')
                     ->toggleable(isToggledHiddenByDefault: true),

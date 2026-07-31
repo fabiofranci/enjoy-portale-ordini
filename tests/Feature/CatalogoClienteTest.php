@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Filament\Client\Resources\Prodotti\Pages\ListProdotti;
 use App\Filament\Client\Resources\Prodotti\ProdottoResource;
 use App\Models\Categoria;
+use App\Models\CategoriaCatalogo;
 use App\Models\CentroCosto;
 use App\Models\Cliente;
 use App\Models\Fornitore;
@@ -289,9 +290,12 @@ final class CatalogoClienteTest extends TestCase
         $listino = $this->priceList($this->ica, 'ICA Scuole');
         $first = $this->reference($this->ica, 'SUP-ALPHA', [
             'customer_article_code' => 'CUSTOM-001',
-            'categoria' => 'Carta',
         ]);
-        $second = $this->reference($this->ica, 'SUP-BETA', ['categoria' => 'Pulizia']);
+        $second = $this->reference($this->ica, 'SUP-BETA');
+        $carta = $this->catalogCategory($this->ica, 'Carta');
+        $pulizia = $this->catalogCategory($this->ica, 'Pulizia');
+        $first->categorie()->attach($carta);
+        $second->categorie()->attach($pulizia);
         $this->price($listino, $first, 1);
         $this->price($listino, $second, 2);
         $this->assign($this->centroCosto, $listino);
@@ -300,9 +304,58 @@ final class CatalogoClienteTest extends TestCase
         $this->assertSame('SUP-ALPHA', $this->service->items($this->centroCosto, 'CUSTOM-001')->first()?->supplierCode);
         $this->assertSame(
             ['SUP-ALPHA'],
-            $this->service->items($this->centroCosto, category: 'Carta')->pluck('supplierCode')->all(),
+            $this->service->items($this->centroCosto, category: (string) $carta->id)->pluck('supplierCode')->all(),
         );
-        $this->assertSame(['Carta' => 'Carta', 'Pulizia' => 'Pulizia'], $this->service->categoryOptions($this->centroCosto));
+        $this->assertSame([$carta->id => 'Carta', $pulizia->id => 'Pulizia'], $this->service->categoryOptions($this->centroCosto));
+    }
+
+    public function test_category_options_exclude_unassigned_lists_other_clients_and_inactive_references(): void
+    {
+        $visibleList = $this->priceList($this->ica, 'Visibile');
+        $hiddenList = $this->priceList($this->ica, 'Non assegnato');
+        $visibleCategory = $this->catalogCategory($this->ica, 'Visibile');
+        $hiddenCategory = $this->catalogCategory($this->ica, 'Nascosta');
+        $inactiveCategory = $this->catalogCategory($this->ica, 'Inattiva');
+        $visible = $this->reference($this->ica, 'VISIBLE');
+        $hidden = $this->reference($this->ica, 'HIDDEN');
+        $inactive = $this->reference($this->ica, 'INACTIVE', ['attivo' => false]);
+        $visible->categorie()->attach($visibleCategory);
+        $hidden->categorie()->attach($hiddenCategory);
+        $inactive->categorie()->attach($inactiveCategory);
+        $this->price($visibleList, $visible, 1);
+        $this->price($hiddenList, $hidden, 2);
+        $this->price($visibleList, $inactive, 3);
+        $this->assign($this->centroCosto, $visibleList);
+
+        $otherClient = $this->client('Altro cliente', '99999999999');
+        $otherCenter = $this->center($otherClient, 'Centro altro cliente');
+        $this->assign($otherCenter, $hiddenList);
+
+        $this->assertSame([$visibleCategory->id => 'Visibile'], $this->service->categoryOptions($this->centroCosto));
+        $this->assertSame(
+            ['VISIBLE'],
+            $this->service->items($this->centroCosto, category: (string) $visibleCategory->id)->pluck('supplierCode')->all(),
+        );
+        $this->assertTrue($this->service->items($this->centroCosto, category: (string) $hiddenCategory->id)->isEmpty());
+    }
+
+    public function test_references_without_category_are_not_lost_by_options_or_filtering(): void
+    {
+        $list = $this->priceList($this->ica, 'Misto');
+        $categorized = $this->reference($this->ica, 'WITH-CATEGORY');
+        $uncategorized = $this->reference($this->ica, 'WITHOUT-CATEGORY');
+        $category = $this->catalogCategory($this->ica, 'Carta');
+        $categorized->categorie()->attach($category);
+        $this->price($list, $categorized, 1);
+        $this->price($list, $uncategorized, 2);
+        $this->assign($this->centroCosto, $list);
+
+        $this->assertCount(2, $this->service->items($this->centroCosto));
+        $this->assertSame([$category->id => 'Carta'], $this->service->categoryOptions($this->centroCosto));
+        $this->assertSame(
+            ['WITH-CATEGORY'],
+            $this->service->items($this->centroCosto, search: null, category: (string) $category->id)->pluck('supplierCode')->all(),
+        );
     }
 
     public function test_customer_article_code_duplicato_non_perde_referenze(): void
@@ -513,7 +566,7 @@ final class CatalogoClienteTest extends TestCase
         DB::disableQueryLog();
 
         $this->assertSame($singleItemQueryCount, $tenItemsQueryCount);
-        $this->assertLessThanOrEqual(6, $tenItemsQueryCount);
+        $this->assertLessThanOrEqual(7, $tenItemsQueryCount);
     }
 
     public function test_strutture_e_dati_del_catalogo_legacy_restano_operativi(): void
@@ -650,6 +703,16 @@ final class CatalogoClienteTest extends TestCase
         $user->assignRole($role);
 
         return $user;
+    }
+
+    private function catalogCategory(Fornitore $supplier, string $name): CategoriaCatalogo
+    {
+        return CategoriaCatalogo::query()->create([
+            'fornitore_id' => $supplier->id,
+            'nome' => $name,
+            'slug' => str($name)->slug()->toString(),
+            'attiva' => true,
+        ]);
     }
 
     private function useClientPanel(): void

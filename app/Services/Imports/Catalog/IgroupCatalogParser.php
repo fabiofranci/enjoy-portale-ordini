@@ -24,6 +24,10 @@ final readonly class IgroupCatalogParser
         'valid_to' => ['fine validita'],
         'supplier_code' => ['cod articolo'],
         'description' => ['articolo'],
+        'category_code' => ['cod categoria', 'codice categoria', 'cod famiglia', 'codice famiglia'],
+        'category' => ['categoria', 'famiglia', 'gruppo merceologico'],
+        'parent_category_code' => ['cod macro categoria', 'codice macro categoria'],
+        'parent_category' => ['macro categoria'],
         'price_unit' => ['umprezzo'],
         'gross_price' => ['prezzo'],
         'discount_1' => ['sconto1'],
@@ -95,6 +99,10 @@ final readonly class IgroupCatalogParser
             $explicitCustomerCode = $this->normalizer->code($raw['customer_article_code'] ?? null);
             $customerCode = $explicitCustomerCode ?? $supplierCode;
             $description = $this->normalizer->text($raw['description'] ?? null);
+            $category = $this->normalizer->text($raw['category'] ?? null);
+            $categoryCode = $this->normalizer->code($raw['category_code'] ?? null);
+            $parentCategory = $this->normalizer->text($raw['parent_category'] ?? null);
+            $parentCategoryCode = $this->normalizer->code($raw['parent_category_code'] ?? null);
             $salesUnit = $this->normalizer->unit($raw['sales_unit'] ?? null);
             $priceUnit = $this->normalizer->unit($raw['price_unit'] ?? null);
             $grossPrice = $this->normalizer->decimal($raw['gross_price'] ?? null);
@@ -112,6 +120,16 @@ final readonly class IgroupCatalogParser
             $packagings = [];
             $warnings = [];
             $errors = [];
+
+            if ($category === null) {
+                $warnings[] = $categoryCode !== null
+                    ? 'category_name_missing'
+                    : 'category_missing';
+            }
+
+            if ($category === null && ($parentCategory !== null || $parentCategoryCode !== null)) {
+                $warnings[] = 'leaf_category_missing';
+            }
 
             if ($supplierCode === null && $explicitCustomerCode === null) {
                 $codeRuleCounts['both_codes_missing']++;
@@ -186,6 +204,10 @@ final readonly class IgroupCatalogParser
                 'supplier_code' => $supplierCode,
                 'customer_article_code' => $customerCode,
                 'description' => $description,
+                'category' => $category,
+                'category_code' => $categoryCode,
+                'parent_category' => $parentCategory,
+                'parent_category_code' => $parentCategoryCode,
                 'sales_unit' => $salesUnit,
                 'source_price' => $netPrice,
                 'source_price_unit' => $priceUnit,
@@ -212,7 +234,10 @@ final readonly class IgroupCatalogParser
                 supplierCode: $supplierCode,
                 customerArticleCode: $customerCode,
                 description: $description,
-                category: null,
+                category: $category,
+                categoryCode: $categoryCode,
+                parentCategory: $parentCategory,
+                parentCategoryCode: $parentCategoryCode,
                 salesUnit: $salesUnit,
                 sourcePrice: $netPrice,
                 sourcePriceUnit: $priceUnit,
@@ -258,6 +283,9 @@ final readonly class IgroupCatalogParser
                 'required_columns' => ['Cod. Articolo', 'Articolo', 'Prezzo Netto'],
                 'optional_columns' => [
                     'Cod. Art. Cliente',
+                    'Categoria/Famiglia',
+                    'Cod. Categoria/Famiglia',
+                    'Macro Categoria',
                     'UMprezzo',
                     'Prezzo',
                     'Sconto1-4',

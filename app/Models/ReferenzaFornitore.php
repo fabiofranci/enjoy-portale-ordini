@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Storage;
 
@@ -51,6 +52,16 @@ class ReferenzaFornitore extends Model
     public function prezziListino(): HasMany
     {
         return $this->hasMany(ListinoReferenza::class, 'referenza_fornitore_id');
+    }
+
+    public function categorie(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            CategoriaCatalogo::class,
+            'referenza_fornitore_categoria',
+            'referenza_fornitore_id',
+            'categoria_catalogo_id',
+        )->withTimestamps();
     }
 
     public function getImmagineUrlAttribute(): ?string
