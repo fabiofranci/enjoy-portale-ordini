@@ -22,11 +22,13 @@ class ImportBatchResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClock;
 
-    protected static ?string $navigationLabel = 'Import cataloghi';
+    protected static ?string $navigationLabel = 'Import Cataloghi';
+
+    protected static ?int $navigationSort = 10;
 
     protected static ?string $modelLabel = 'Import catalogo';
 
-    protected static ?string $pluralModelLabel = 'Import cataloghi';
+    protected static ?string $pluralModelLabel = 'Import Cataloghi';
 
     public static function table(Table $table): Table
     {

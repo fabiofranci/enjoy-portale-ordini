@@ -19,9 +19,11 @@ class CentroCostoResource extends Resource
 {
     protected static ?string $model = CentroCosto::class;
 
-    protected static ?string $navigationLabel = 'Centri di costo';
+    protected static ?string $navigationLabel = 'Centri di Costo';
 
-    protected static ?string $pluralModelLabel = 'Centri di costo';
+    protected static ?int $navigationSort = 40;
+
+    protected static ?string $pluralModelLabel = 'Centri di Costo';
 
     protected static ?string $modelLabel = 'Centro di costo';
 

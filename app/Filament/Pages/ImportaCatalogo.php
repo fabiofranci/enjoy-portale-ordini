@@ -36,6 +36,11 @@ class ImportaCatalogo extends Page implements HasForms
         $this->form->fill();
     }
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
+
     public static function canAccess(): bool
     {
         return auth()->user()?->hasRole('admin') === true;

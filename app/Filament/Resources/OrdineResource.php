@@ -21,7 +21,7 @@ class OrdineResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShoppingBag;
     protected static ?string $navigationLabel = 'Ordini';
-    protected static ?int $navigationSort = 20;
+    protected static ?int $navigationSort = 60;
 
     protected static ?string $modelLabel = 'Ordine';
     protected static ?string $pluralModelLabel = 'Ordini';

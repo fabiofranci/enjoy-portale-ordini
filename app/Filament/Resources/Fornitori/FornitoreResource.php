@@ -21,6 +21,8 @@ class FornitoreResource extends Resource
 
     protected static ?string $navigationLabel = 'Fornitori';
 
+    protected static ?int $navigationSort = 20;
+
     protected static ?string $pluralModelLabel = 'Fornitori';
 
     protected static ?string $modelLabel = 'Fornitore';

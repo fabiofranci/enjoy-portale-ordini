@@ -21,6 +21,14 @@ class ListinoResource extends Resource
 {
     protected static ?string $model = Listino::class;
 
+    protected static ?string $navigationLabel = 'Listini';
+
+    protected static ?int $navigationSort = 50;
+
+    protected static ?string $modelLabel = 'Listino';
+
+    protected static ?string $pluralModelLabel = 'Listini';
+
     public static function form(Schema $schema): Schema
     {
         return $schema->schema(ListinoForm::make());
