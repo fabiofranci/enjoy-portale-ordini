@@ -41,6 +41,14 @@ class Listino extends Model
         return $this->hasMany(ListinoReferenza::class, 'listino_id');
     }
 
+    public function referenzeOrdinabili(): HasMany
+    {
+        return $this->hasMany(ListinoReferenza::class, 'listino_id')
+            ->where('ordinabile', true)
+            ->whereNotNull('prezzo')
+            ->whereHas('referenza', static fn ($query) => $query->where('ordinabile', true));
+    }
+
     public function importBatches(): HasMany
     {
         return $this->hasMany(ImportBatch::class, 'listino_id');

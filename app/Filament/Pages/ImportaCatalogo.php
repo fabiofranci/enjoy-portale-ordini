@@ -68,6 +68,7 @@ class ImportaCatalogo extends Page implements HasForms
                 ->required(fn (callable $get): bool => $get('supplier_code') === 'ICA'),
             FileUpload::make('file')
                 ->label('File catalogo')
+                ->maxSize(10 * 1024)
                 ->acceptedFileTypes([
                     'text/csv',
                     'application/vnd.ms-excel',

@@ -13,10 +13,15 @@ class Fornitore extends Model
     protected $fillable = [
         'code',
         'nome',
+        'attivo',
         'partita_iva',
         'email',
         'telefono',
         'indirizzo',
+    ];
+
+    protected $casts = [
+        'attivo' => 'boolean',
     ];
 
     public function getRouteKeyName(): string

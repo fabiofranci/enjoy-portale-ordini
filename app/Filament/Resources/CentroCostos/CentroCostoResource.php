@@ -5,6 +5,7 @@ namespace App\Filament\Resources\CentroCostos;
 use App\Filament\Resources\CentroCostos\Pages\CreateCentroCosto;
 use App\Filament\Resources\CentroCostos\Pages\EditCentroCosto;
 use App\Filament\Resources\CentroCostos\Pages\ListCentroCostos;
+use App\Filament\Resources\CentroCostos\RelationManagers\ListiniCommercialiRelationManager;
 use App\Filament\Resources\CentroCostos\Schemas\CentroCostoForm;
 use App\Filament\Resources\CentroCostos\Tables\CentroCostosTable;
 use App\Models\CentroCosto;
@@ -39,7 +40,7 @@ class CentroCostoResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            ListiniCommercialiRelationManager::class,
         ];
     }
 

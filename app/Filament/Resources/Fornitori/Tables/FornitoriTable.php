@@ -26,6 +26,10 @@ class FornitoriTable
                     ->sortable()
                     ->searchable(),
 
+                Tables\Columns\IconColumn::make('attivo')
+                    ->label('Attivo')
+                    ->boolean(),
+
                 Tables\Columns\TextColumn::make('partita_iva')
                     ->label('P. IVA')
                     ->searchable(),

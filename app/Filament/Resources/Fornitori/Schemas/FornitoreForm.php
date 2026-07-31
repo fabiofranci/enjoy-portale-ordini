@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Fornitori\Schemas;
 
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Schema;
 
 class FornitoreForm
@@ -21,6 +22,10 @@ class FornitoreForm
                 ->label('Nome')
                 ->required()
                 ->columnSpanFull(),
+
+            Toggle::make('attivo')
+                ->label('Attivo')
+                ->default(true),
 
             TextInput::make('partita_iva')
                 ->label('Partita IVA')

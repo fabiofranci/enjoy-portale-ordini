@@ -15,6 +15,7 @@ use App\Services\Imports\Catalog\CatalogPersistentImportService;
 use App\Services\Imports\Catalog\Exceptions\CatalogImportConflictException;
 use Database\Seeders\SupplierSeeder;
 use DomainException;
+use Filament\Forms\Components\FileUpload;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -22,6 +23,7 @@ use InvalidArgumentException;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use ReflectionClass;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -368,6 +370,18 @@ final class CatalogPersistentImportTest extends TestCase
 
         auth()->logout();
         $this->assertFalse(ImportaCatalogo::canAccess());
+    }
+
+    public function test_catalog_upload_accepts_files_up_to_ten_megabytes(): void
+    {
+        $page = app(ImportaCatalogo::class);
+        $method = (new ReflectionClass($page))->getMethod('getFormSchema');
+        $method->setAccessible(true);
+        $fileUpload = collect($method->invoke($page))
+            ->first(static fn (mixed $component): bool => $component instanceof FileUpload);
+
+        $this->assertInstanceOf(FileUpload::class, $fileUpload);
+        $this->assertSame(10 * 1024, $fileUpload->getMaxSize());
     }
 
     private function service(): CatalogPersistentImportService
