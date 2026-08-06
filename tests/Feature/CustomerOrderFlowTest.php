@@ -23,10 +23,12 @@ use App\Services\Orders\OrderStatusService;
 use App\Services\Orders\OrderSubmissionService;
 use Filament\Facades\Filament;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\View;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
@@ -395,6 +397,86 @@ final class CustomerOrderFlowTest extends TestCase
         $this->assertSame('SMTP non disponibile', $ordine->email_last_error);
         $this->assertNull($ordine->email_sent_at);
         $this->assertDatabaseHas('ordini', ['riferimento_cliente' => 'MAIL-ERROR']);
+    }
+
+    public function test_errore_di_rendering_pdf_viene_registrato_e_puo_essere_reinviato(): void
+    {
+        config(['services.orders.administration_email' => 'ordini@enjoy-service.it']);
+        $viewFactory = View::getFacadeRoot();
+        View::shouldReceive('make')
+            ->once()
+            ->with('pdf.orders.quote-request', \Mockery::type('array'))
+            ->andThrow(new RuntimeException('Rendering PDF non disponibile'));
+
+        try {
+            $ordine = $this->submitPrice($this->catalogPrice('ICA-PDF-RENDER', 10), 'PDF-RENDER');
+        } finally {
+            View::swap($viewFactory);
+        }
+
+        $ordine->refresh();
+        $this->assertSame('errore', $ordine->email_stato);
+        $this->assertSame(1, $ordine->email_attempts);
+        $this->assertSame(
+            'Preparazione PDF: Rendering PDF non disponibile',
+            $ordine->email_last_error,
+        );
+        $this->assertNull($ordine->pdf_path);
+
+        $admin = User::factory()->create();
+        $admin->assignRole(Role::query()->create(['name' => 'admin']));
+        app(OrderNotificationService::class)->resend($ordine, $admin);
+
+        $ordine->refresh();
+        $this->assertSame('parziale', $ordine->email_stato);
+        $this->assertSame(2, $ordine->email_attempts);
+        $this->assertNull($ordine->email_last_error);
+        Storage::disk('local')->assertExists((string) $ordine->pdf_path);
+    }
+
+    public function test_errore_storage_non_sostituisce_il_pdf_valido_e_consente_il_reinvio(): void
+    {
+        $ordine = $this->submitPrice($this->catalogPrice('ICA-PDF-STORAGE', 10), 'PDF-STORAGE');
+        $ordine->refresh();
+        $path = (string) $ordine->pdf_path;
+        $realDisk = Storage::disk('local');
+        $filesystemManager = Storage::getFacadeRoot();
+        $originalContent = $realDisk->get($path);
+        $failingDisk = \Mockery::mock(FilesystemAdapter::class);
+        $failingDisk->shouldReceive('put')->once()->andReturnFalse();
+        Storage::shouldReceive('disk')->once()->with('local')->andReturn($failingDisk);
+        $admin = User::factory()->create();
+        $admin->assignRole(Role::query()->create(['name' => 'admin']));
+
+        try {
+            app(OrderNotificationService::class)->resend($ordine, $admin);
+            $this->fail('Il reinvio deve segnalare il fallimento dello storage.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame(
+                'Impossibile salvare il documento PDF temporaneo.',
+                $exception->getMessage(),
+            );
+        } finally {
+            Storage::swap($filesystemManager);
+        }
+
+        $ordine->refresh();
+        $this->assertSame($path, $ordine->pdf_path);
+        $this->assertSame($originalContent, $realDisk->get($path));
+        $this->assertSame('errore', $ordine->email_stato);
+        $this->assertSame(2, $ordine->email_attempts);
+        $this->assertSame(
+            'Preparazione PDF: Impossibile salvare il documento PDF temporaneo.',
+            $ordine->email_last_error,
+        );
+
+        config(['services.orders.administration_email' => 'ordini@enjoy-service.it']);
+        app(OrderNotificationService::class)->resend($ordine, $admin);
+
+        $ordine->refresh();
+        $this->assertSame('parziale', $ordine->email_stato);
+        $this->assertSame(3, $ordine->email_attempts);
+        $this->assertNull($ordine->email_last_error);
     }
 
     public function test_amministratore_puo_reinviare_un_email_fallita_e_l_esito_e_tracciato(): void

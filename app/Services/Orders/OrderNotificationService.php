@@ -7,6 +7,8 @@ namespace App\Services\Orders;
 use App\Models\Ordine;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Str;
+use Throwable;
 
 final readonly class OrderNotificationService
 {
@@ -32,9 +34,33 @@ final readonly class OrderNotificationService
     private function deliver(Ordine $ordine, bool $force): Ordine
     {
         $ordine->loadMissing(['user.cliente', 'centroCosto', 'fornitore', 'items']);
-        $pdf = $this->pdfService->generate($ordine);
+
+        try {
+            $pdf = $this->pdfService->generate($ordine);
+        } catch (Throwable $exception) {
+            $this->recordPdfFailure($ordine, $exception);
+
+            throw $exception;
+        }
+
         $this->mailService->send($ordine, $pdf['path'], $pdf['filename'], $force);
 
         return $ordine->refresh();
+    }
+
+    private function recordPdfFailure(Ordine $ordine, Throwable $exception): void
+    {
+        $message = trim($exception->getMessage());
+
+        $ordine->forceFill([
+            'email_stato' => 'errore',
+            'email_attempts' => (int) $ordine->email_attempts + 1,
+            'email_last_attempt_at' => now(),
+            'email_last_error' => Str::limit(
+                'Preparazione PDF: '.($message !== '' ? $message : $exception::class),
+                2000,
+                '',
+            ),
+        ])->save();
     }
 }
