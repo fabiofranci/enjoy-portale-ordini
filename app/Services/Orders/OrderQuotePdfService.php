@@ -29,13 +29,32 @@ final class OrderQuotePdfService
         $fileName = $this->buildFileName($ordine);
         $path = $this->buildStoragePath($ordine, $fileName);
         $content = $this->renderPdf($ordine);
+        $this->ensureValidPdf($content);
+        $disk = Storage::disk('local');
+        $temporaryPath = $path.'.tmp-'.Str::uuid();
+        $temporaryStored = false;
 
-        if (! Storage::disk('local')->put($path, $content)) {
-            throw new RuntimeException('Impossibile salvare il documento PDF.');
-        }
+        try {
+            if (! $disk->put($temporaryPath, $content)) {
+                throw new RuntimeException('Impossibile salvare il documento PDF temporaneo.');
+            }
 
-        if (Storage::disk('public')->exists($path)) {
-            Storage::disk('public')->delete($path);
+            $temporaryStored = true;
+            $storedContent = $disk->get($temporaryPath);
+
+            if (! is_string($storedContent) || ! hash_equals(hash('sha256', $content), hash('sha256', $storedContent))) {
+                throw new RuntimeException('La verifica del documento PDF temporaneo non e riuscita.');
+            }
+
+            if (! $disk->move($temporaryPath, $path)) {
+                throw new RuntimeException('Impossibile rendere definitivo il documento PDF.');
+            }
+
+            $temporaryStored = false;
+        } finally {
+            if ($temporaryStored) {
+                $disk->delete($temporaryPath);
+            }
         }
 
         $ordine->forceFill([
@@ -70,6 +89,13 @@ final class OrderQuotePdfService
         $dompdf->render();
 
         return $dompdf->output();
+    }
+
+    private function ensureValidPdf(string $content): void
+    {
+        if (! str_starts_with($content, '%PDF-') || ! str_contains(substr($content, -1024), '%%EOF')) {
+            throw new RuntimeException('Il documento PDF generato non e valido.');
+        }
     }
 
     private function buildFileName(Ordine $ordine): string

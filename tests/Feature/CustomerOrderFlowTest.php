@@ -24,7 +24,6 @@ use App\Services\Orders\OrderSubmissionService;
 use Filament\Facades\Filament;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -251,15 +250,8 @@ final class CustomerOrderFlowTest extends TestCase
         $this->assertSame(Ordine::STATUS_FULFILLED, $ordine->fresh()->stato);
     }
 
-    public function test_migration_ordini_supporta_rollback_e_mappa_lo_stato_esistente(): void
+    public function test_migration_ordini_definisce_lo_schema_senza_convertire_dati(): void
     {
-        $ordine = Ordine::query()->create([
-            'user_id' => $this->user->getKey(),
-            'centro_costo_id' => $this->centroCosto->getKey(),
-            'stato' => Ordine::STATUS_NEW,
-            'riferimento_cliente' => 'MIGRATION-STATUS',
-            'totale_lordo' => 1,
-        ]);
         $migration = require database_path(
             'migrations/2026_08_06_000001_extend_order_details_and_statuses.php'
         );
@@ -267,15 +259,16 @@ final class CustomerOrderFlowTest extends TestCase
         $migration->down();
 
         $this->assertFalse(Schema::hasColumn('ordini', 'data_ordine'));
-        $this->assertSame('inviato', DB::table('ordini')->where('id', $ordine->id)->value('stato'));
 
         $migration->up();
 
-        $mapped = Ordine::query()->findOrFail($ordine->id);
-        $this->assertSame(Ordine::STATUS_NEW, $mapped->stato);
-        $this->assertSame($this->user->name, $mapped->inviato_da_nome);
-        $this->assertSame($this->user->email, $mapped->inviato_da_email);
-        $this->assertNotNull($mapped->data_ordine);
+        $ordine = Ordine::query()->create([
+            'user_id' => $this->user->getKey(),
+            'riferimento_cliente' => 'MIGRATION-STATUS',
+            'totale_lordo' => 1,
+        ])->refresh();
+        $this->assertSame(Ordine::STATUS_NEW, $ordine->stato);
+        $this->assertNull($ordine->data_ordine);
     }
 
     public function test_carrello_non_piu_valido_viene_svuotato_con_un_avviso(): void
@@ -520,7 +513,7 @@ final class CustomerOrderFlowTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_migration_documenti_sposta_pdf_esistente_dal_disco_pubblico(): void
+    public function test_migration_documenti_e_esclusivamente_strutturale(): void
     {
         $ordine = Ordine::query()->create([
             'user_id' => $this->user->getKey(),
@@ -538,9 +531,9 @@ final class CustomerOrderFlowTest extends TestCase
         $migration->down();
         $migration->up();
 
-        Storage::disk('public')->assertMissing((string) $ordine->pdf_path);
-        Storage::disk('local')->assertExists((string) $ordine->pdf_path);
-        $this->assertSame('legacy-pdf', Storage::disk('local')->get((string) $ordine->pdf_path));
+        $this->assertTrue(Schema::hasColumn('ordini', 'xlsx_path'));
+        Storage::disk('public')->assertExists((string) $ordine->pdf_path);
+        Storage::disk('local')->assertMissing((string) $ordine->pdf_path);
     }
 
     public function test_numero_ordine_non_puo_essere_riutilizzato_e_storico_e_isolato(): void
