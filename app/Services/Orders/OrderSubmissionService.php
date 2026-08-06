@@ -21,8 +21,7 @@ final class OrderSubmissionService
 {
     public function __construct(
         private readonly CatalogoClienteService $catalogo,
-        private readonly OrderQuotePdfService $pdfService,
-        private readonly SupplierOrderMailService $mailService,
+        private readonly OrderNotificationService $notificationService,
     ) {}
 
     /**
@@ -132,11 +131,8 @@ final class OrderSubmissionService
         $ordine->loadMissing(['user.cliente', 'centroCosto', 'fornitore', 'items']);
 
         try {
-            $pdf = $this->pdfService->generate($ordine);
-            $this->mailService->send($ordine, $pdf['path'], $pdf['filename']);
+            $this->notificationService->sendInitial($ordine);
         } catch (Throwable $exception) {
-            $ordine->forceFill(['email_stato' => 'errore'])->save();
-
             Log::error('Order email delivery failed after persistence', [
                 'ordine_id' => $ordine->getKey(),
                 'exception' => $exception,

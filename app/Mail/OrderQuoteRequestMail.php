@@ -27,9 +27,12 @@ final class OrderQuoteRequestMail extends Mailable
         $subjectSuffix = $reference !== ''
             ? 'Conferma '.$reference
             : 'Ordine '.$this->ordine->id;
+        $priorityPrefix = $this->ordine->priorita === Ordine::PRIORITY_URGENT
+            ? '[URGENTE] '
+            : '';
 
         return new Envelope(
-            subject: 'Ordine cliente - richiesta preventivo '.$subjectSuffix,
+            subject: $priorityPrefix.'Ordine cliente - richiesta preventivo '.$subjectSuffix,
         );
     }
 

@@ -48,11 +48,13 @@ non viene comunicato un recapito verificato. L'indirizzo amministrativo comune
 si configura nell'ambiente:
 
 ```dotenv
-ORDER_ADMINISTRATION_EMAIL=
+ORDER_ADMINISTRATION_EMAIL=ordini@enjoy-service.it
 ```
 
-Se manca uno dei due destinatari l'ordine resta valido e la consegna email e
-segnalata come `parziale`; se mancano entrambi resta `in_attesa`.
+Il destinatario amministrativo e obbligatorio: se manca, l'ordine resta valido
+ma il tentativo e registrato come `errore`. Se manca solo l'indirizzo del
+fornitore, l'email viene comunque inviata all'amministrazione ed e segnalata
+come `parziale`.
 
 ## About Laravel
 

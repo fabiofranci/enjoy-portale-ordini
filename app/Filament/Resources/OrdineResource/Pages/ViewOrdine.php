@@ -5,6 +5,7 @@ namespace App\Filament\Resources\OrdineResource\Pages;
 use App\Filament\Resources\OrdineResource;
 use App\Models\Ordine;
 use App\Models\User;
+use App\Services\Orders\OrderNotificationService;
 use App\Services\Orders\OrderStatusService;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -12,6 +13,7 @@ use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Schema;
+use Throwable;
 
 class ViewOrdine extends ViewRecord
 {
@@ -20,6 +22,38 @@ class ViewOrdine extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('resendEmail')
+                ->label('Reinvia email')
+                ->icon('heroicon-o-envelope')
+                ->color('gray')
+                ->requiresConfirmation()
+                ->visible(fn (): bool => auth()->user()?->hasRole('admin') === true)
+                ->action(function (): void {
+                    $actor = auth()->user();
+
+                    abort_unless($actor instanceof User, 403);
+
+                    try {
+                        $this->record = app(OrderNotificationService::class)
+                            ->resend($this->record, $actor);
+
+                        $successful = in_array($this->record->email_stato, ['inviata', 'parziale'], true);
+
+                        Notification::make()
+                            ->title($successful ? 'Email ordine reinviata' : 'Email ordine non inviata')
+                            ->body($successful ? null : $this->record->email_last_error)
+                            ->color($successful ? 'success' : 'danger')
+                            ->send();
+                    } catch (Throwable $exception) {
+                        report($exception);
+
+                        Notification::make()
+                            ->title('Email ordine non inviata')
+                            ->body($this->record->fresh()?->email_last_error)
+                            ->danger()
+                            ->send();
+                    }
+                }),
             Action::make('markAsFulfilled')
                 ->label('Segna come evaso')
                 ->icon('heroicon-o-check-circle')
@@ -72,6 +106,12 @@ class ViewOrdine extends ViewRecord
                     Text::make('orari_consegna')->label('Orari di consegna')->placeholder('-'),
                     Text::make('note')->label('Note')->placeholder('-'),
                     Text::make('email_stato')->label('Stato email'),
+                    Text::make('email_attempts')->label('Tentativi email'),
+                    Text::make('email_last_attempt_at')
+                        ->label('Ultimo tentativo email')
+                        ->dateTime('d/m/Y H:i')
+                        ->placeholder('-'),
+                    Text::make('email_last_error')->label('Ultimo errore email')->placeholder('-'),
                 ]),
 
             Section::make('Totale')

@@ -18,6 +18,7 @@ use App\Models\Ordine;
 use App\Models\ReferenzaFornitore;
 use App\Models\User;
 use App\Services\Orders\CatalogCartService;
+use App\Services\Orders\OrderNotificationService;
 use App\Services\Orders\OrderStatusService;
 use App\Services\Orders\OrderSubmissionService;
 use Filament\Facades\Filament;
@@ -29,6 +30,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
+use RuntimeException;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -124,8 +126,14 @@ final class CustomerOrderFlowTest extends TestCase
         $this->assertSame('Via Consegna 20, Milano', $ordine->indirizzo_destinazione);
         $this->assertSame('Mario Rossi', $ordine->riferimento_richiedente);
         $this->assertSame('Lunedi-venerdi 08:00-12:00', $ordine->orari_consegna);
-        $this->assertSame('in_attesa', $ordine->email_stato);
+        $this->assertSame('errore', $ordine->email_stato);
         $this->assertSame([], $ordine->email_recipients);
+        $this->assertSame(1, $ordine->email_attempts);
+        $this->assertNotNull($ordine->email_last_attempt_at);
+        $this->assertSame(
+            'Destinatario amministrativo ORDER_ADMINISTRATION_EMAIL non configurato.',
+            $ordine->email_last_error,
+        );
         $this->assertSame('25.00', $ordine->totale_lordo);
         $this->assertNull($ordine->totale_netto);
         $this->assertNull($ordine->iva_totale);
@@ -309,23 +317,25 @@ final class CustomerOrderFlowTest extends TestCase
 
     public function test_email_solo_amministrazione_risulta_parziale(): void
     {
-        config(['services.orders.administration_email' => 'amministrazione@example.test']);
+        config(['services.orders.administration_email' => 'ordini@enjoy-service.it']);
         $price = $this->catalogPrice('ICA-MAIL', 10);
 
         $ordine = $this->submitPrice($price, 'ADMIN-ONLY');
 
         $this->assertSame('parziale', $ordine->email_stato);
         $this->assertNotNull($ordine->email_sent_at);
-        $this->assertSame(['amministrazione@example.test'], $ordine->email_recipients);
+        $this->assertSame(['ordini@enjoy-service.it'], $ordine->email_recipients);
+        $this->assertSame(1, $ordine->email_attempts);
+        $this->assertNull($ordine->email_last_error);
         Mail::assertSent(
             OrderQuoteRequestMail::class,
-            static fn (OrderQuoteRequestMail $mail): bool => $mail->hasTo('amministrazione@example.test'),
+            static fn (OrderQuoteRequestMail $mail): bool => $mail->hasTo('ordini@enjoy-service.it'),
         );
     }
 
     public function test_email_fornitore_e_amministrazione_risulta_completa(): void
     {
-        config(['services.orders.administration_email' => 'amministrazione@example.test']);
+        config(['services.orders.administration_email' => 'ordini@enjoy-service.it']);
         $this->supplier->update(['email' => 'ordini.ica@example.test']);
         $price = $this->catalogPrice('ICA-FULL-MAIL', 10);
 
@@ -335,8 +345,110 @@ final class CustomerOrderFlowTest extends TestCase
         Mail::assertSent(
             OrderQuoteRequestMail::class,
             static fn (OrderQuoteRequestMail $mail): bool => $mail->hasTo('ordini.ica@example.test')
-                && $mail->hasCc('amministrazione@example.test'),
+                && $mail->hasCc('ordini@enjoy-service.it'),
         );
+    }
+
+    public function test_email_ordine_urgente_espone_priorita_e_dati_di_consegna(): void
+    {
+        config(['services.orders.administration_email' => 'ordini@enjoy-service.it']);
+        $price = $this->catalogPrice('ICA-URGENT', 10);
+        $cart = app(CatalogCartService::class);
+        $cart->add($this->user, (int) $this->centroCosto->getKey(), (int) $price->getKey());
+        $contents = $cart->contents($this->user);
+
+        app(OrderSubmissionService::class)->submit(
+            $this->user,
+            $contents['centro_costo_id'],
+            $contents['items'],
+            'URGENT-1',
+            priority: Ordine::PRIORITY_URGENT,
+            destinationAddress: 'Via Urgente 1, Milano',
+            requesterReference: 'Portineria',
+            deliveryHours: '08:00-10:00',
+        );
+
+        Mail::assertSent(
+            OrderQuoteRequestMail::class,
+            static function (OrderQuoteRequestMail $mail): bool {
+                $mail->assertSeeInHtml('Urgente');
+                $mail->assertSeeInHtml('Via Urgente 1, Milano');
+                $mail->assertSeeInHtml('Portineria');
+                $mail->assertSeeInHtml('08:00-10:00');
+
+                return str_starts_with($mail->envelope()->subject, '[URGENTE] ');
+            },
+        );
+    }
+
+    public function test_errore_del_trasporto_email_viene_registrato_senza_perdere_l_ordine(): void
+    {
+        config(['services.orders.administration_email' => 'ordini@enjoy-service.it']);
+        Mail::shouldReceive('to')
+            ->once()
+            ->andThrow(new RuntimeException('SMTP non disponibile'));
+
+        $ordine = $this->submitPrice($this->catalogPrice('ICA-MAIL-ERROR', 10), 'MAIL-ERROR');
+
+        $this->assertSame('errore', $ordine->email_stato);
+        $this->assertSame(1, $ordine->email_attempts);
+        $this->assertSame('SMTP non disponibile', $ordine->email_last_error);
+        $this->assertNull($ordine->email_sent_at);
+        $this->assertDatabaseHas('ordini', ['riferimento_cliente' => 'MAIL-ERROR']);
+    }
+
+    public function test_amministratore_puo_reinviare_un_email_fallita_e_l_esito_e_tracciato(): void
+    {
+        $ordine = $this->submitPrice($this->catalogPrice('ICA-RESEND', 10), 'RESEND-1');
+        $this->assertSame('errore', $ordine->email_stato);
+        $this->assertSame(1, $ordine->email_attempts);
+
+        config(['services.orders.administration_email' => 'ordini@enjoy-service.it']);
+        $admin = User::factory()->create();
+        $admin->assignRole(Role::query()->create(['name' => 'admin']));
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+
+        Livewire::actingAs($admin)
+            ->test(ViewOrdine::class, ['record' => $ordine->getRouteKey()])
+            ->callAction('resendEmail')
+            ->assertHasNoActionErrors();
+
+        $ordine->refresh();
+        $this->assertSame('parziale', $ordine->email_stato);
+        $this->assertSame(2, $ordine->email_attempts);
+        $this->assertNull($ordine->email_last_error);
+        $this->assertNotNull($ordine->email_sent_at);
+        Mail::assertSent(
+            OrderQuoteRequestMail::class,
+            static function (OrderQuoteRequestMail $mail): bool {
+                $mail->assertSeeInHtml('Via Centro 10, Milano');
+                $mail->assertSeeInHtml('Standard');
+
+                return $mail->hasTo('ordini@enjoy-service.it');
+            },
+        );
+    }
+
+    public function test_cliente_non_puo_reinviare_email_ordine(): void
+    {
+        $ordine = $this->submitPrice($this->catalogPrice('ICA-NO-RESEND', 10), 'NO-RESEND');
+
+        $this->expectException(AuthorizationException::class);
+
+        app(OrderNotificationService::class)->resend($ordine, $this->user);
+    }
+
+    public function test_migration_tracciamento_email_supporta_rollback_e_riesecuzione(): void
+    {
+        $migration = require database_path(
+            'migrations/2026_08_06_000002_add_email_delivery_tracking_to_orders.php'
+        );
+
+        $migration->down();
+        $this->assertFalse(Schema::hasColumn('ordini', 'email_attempts'));
+
+        $migration->up();
+        $this->assertTrue(Schema::hasColumn('ordini', 'email_attempts'));
     }
 
     public function test_numero_ordine_non_puo_essere_riutilizzato_e_storico_e_isolato(): void

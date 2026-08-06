@@ -26,6 +26,7 @@ class Ordine extends Model
         'indirizzo_destinazione', 'orari_consegna', 'note', 'extra_budget',
         'totale_lordo', 'totale_netto', 'iva_totale', 'pdf_path',
         'email_stato', 'email_sent_at', 'email_recipients',
+        'email_attempts', 'email_last_attempt_at', 'email_last_error',
         'odoo_lead_id', 'igroup_sent_at', 'odoo_synced_at',
     ];
 
@@ -37,6 +38,8 @@ class Ordine extends Model
         'iva_totale' => 'decimal:2',
         'email_sent_at' => 'datetime',
         'email_recipients' => 'array',
+        'email_attempts' => 'integer',
+        'email_last_attempt_at' => 'datetime',
         'odoo_lead_id' => 'integer',
         'igroup_sent_at' => 'datetime',
         'odoo_synced_at' => 'datetime',
