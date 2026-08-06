@@ -30,6 +30,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use RuntimeException;
 use Spatie\Permission\Models\Role;
@@ -470,6 +471,9 @@ final class CustomerOrderFlowTest extends TestCase
         $this->assertStringContainsString('no-store', $cacheControl);
         $this->assertStringStartsWith('%PDF-', $pdfResponse->getContent());
 
+        $ordine->forceFill(['riferimento_richiedente' => '=1+1'])->save();
+        $ordine->items()->firstOrFail()->forceFill(['descrizione' => '=HYPERLINK("https://example.test")'])->save();
+
         $xlsxResponse = $this->get(route('orders.documents.download', [
             'ordine' => $ordine,
             'format' => 'xlsx',
@@ -489,6 +493,10 @@ final class CustomerOrderFlowTest extends TestCase
         $this->assertSame('Ordine cliente', $sheet->getCell('A1')->getValue());
         $this->assertSame('Standard', $sheet->getCell('B6')->getValue());
         $this->assertSame('ICA-DOCUMENT', $sheet->getCell('A18')->getValue());
+        $this->assertSame('=1+1', $sheet->getCell('B13')->getValue());
+        $this->assertSame(DataType::TYPE_STRING, $sheet->getCell('B13')->getDataType());
+        $this->assertSame('=HYPERLINK("https://example.test")', $sheet->getCell('B18')->getValue());
+        $this->assertSame(DataType::TYPE_STRING, $sheet->getCell('B18')->getDataType());
         $spreadsheet->disconnectWorksheets();
 
         $otherClient = Cliente::query()->create([

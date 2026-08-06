@@ -10,6 +10,7 @@ use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use RuntimeException;
 
@@ -59,7 +60,12 @@ final class OrderExcelService
             ['Orari di consegna', $ordine->orari_consegna],
             ['Note', $ordine->note],
         ];
-        $sheet->fromArray($metadata, null, 'A3');
+        $metadataRow = 3;
+        foreach ($metadata as [$label, $value]) {
+            $sheet->setCellValue("A{$metadataRow}", $label);
+            $this->setText($sheet, "B{$metadataRow}", $value);
+            $metadataRow++;
+        }
         $sheet->getStyle('A3:A15')->getFont()->setBold(true);
 
         $headerRow = 17;
@@ -78,9 +84,9 @@ final class OrderExcelService
 
         $rowNumber = $headerRow + 1;
         foreach ($ordine->items as $item) {
-            $sheet->setCellValueExplicit("A{$rowNumber}", (string) $item->supplier_code, DataType::TYPE_STRING);
-            $sheet->setCellValue("B{$rowNumber}", $item->descrizione);
-            $sheet->setCellValue("C{$rowNumber}", $item->unita);
+            $this->setText($sheet, "A{$rowNumber}", $item->supplier_code);
+            $this->setText($sheet, "B{$rowNumber}", $item->descrizione);
+            $this->setText($sheet, "C{$rowNumber}", $item->unita);
             $sheet->setCellValue("D{$rowNumber}", (int) $item->quantita);
             $sheet->setCellValue("E{$rowNumber}", (float) $item->prezzo_unitario_lordo);
             $sheet->setCellValue("F{$rowNumber}", (float) $item->totale_riga_lordo);
@@ -129,5 +135,10 @@ final class OrderExcelService
         $datePath = ($ordine->data_ordine ?? $ordine->created_at)?->format('Y/m') ?? now()->format('Y/m');
 
         return sprintf('ordini/documenti/%s/%s', $datePath, $fileName);
+    }
+
+    private function setText(Worksheet $sheet, string $cell, mixed $value): void
+    {
+        $sheet->setCellValueExplicit($cell, (string) ($value ?? ''), DataType::TYPE_STRING);
     }
 }

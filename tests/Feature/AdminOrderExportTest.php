@@ -12,6 +12,7 @@ use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -44,7 +45,7 @@ final class AdminOrderExportTest extends TestCase
     public function test_filtro_data_inclusivo_ed_export_usano_solo_gli_ordini_visibili(): void
     {
         $before = $this->order('PRIMA', '2026-07-31 23:59:59');
-        $from = $this->order('DAL', '2026-08-01 00:00:00');
+        $from = $this->order('=DAL', '2026-08-01 00:00:00');
         $to = $this->order('AL', '2026-08-03 23:59:59', Ordine::PRIORITY_URGENT);
         $after = $this->order('DOPO', '2026-08-04 00:00:00');
 
@@ -79,9 +80,11 @@ final class AdminOrderExportTest extends TestCase
                 $sheet->getCell('B5')->getValue(),
                 $sheet->getCell('B6')->getValue(),
             ];
-            $this->assertEqualsCanonicalizing(['DAL', 'AL'], $references);
+            $this->assertEqualsCanonicalizing(['=DAL', 'AL'], $references);
             $this->assertNotContains('PRIMA', $references);
             $this->assertNotContains('DOPO', $references);
+            $this->assertSame(DataType::TYPE_STRING, $sheet->getCell('B5')->getDataType());
+            $this->assertSame(DataType::TYPE_STRING, $sheet->getCell('B6')->getDataType());
             $this->assertSame('Dal 2026-08-01 al 2026-08-03', $sheet->getCell('B2')->getValue());
             $spreadsheet->disconnectWorksheets();
         } finally {
