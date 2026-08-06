@@ -71,7 +71,11 @@
         </tr>
         <tr>
             <td class="meta-label">Data invio</td>
-            <td>{{ $ordine->created_at?->format('d/m/Y H:i') ?? now()->format('d/m/Y H:i') }}</td>
+            <td>{{ ($ordine->data_ordine ?? $ordine->created_at)?->format('d/m/Y H:i') ?? now()->format('d/m/Y H:i') }}</td>
+        </tr>
+        <tr>
+            <td class="meta-label">Priorita</td>
+            <td><strong>{{ $ordine->prioritaLabel() }}</strong></td>
         </tr>
         <tr>
             <td class="meta-label">Conferma ordine</td>
@@ -87,11 +91,23 @@
         </tr>
         <tr>
             <td class="meta-label">Contatto</td>
-            <td>{{ $ordine->user?->name ?? '-' }}</td>
+            <td>{{ $ordine->inviato_da_nome ?? '-' }}</td>
         </tr>
         <tr>
             <td class="meta-label">Email</td>
-            <td>{{ $ordine->user?->email ?? $ordine->user?->cliente?->email ?? '-' }}</td>
+            <td>{{ $ordine->inviato_da_email ?? '-' }}</td>
+        </tr>
+        <tr>
+            <td class="meta-label">Indirizzo di destinazione</td>
+            <td>{{ $ordine->indirizzo_destinazione ?? '-' }}</td>
+        </tr>
+        <tr>
+            <td class="meta-label">Riferimento in loco</td>
+            <td>{{ $ordine->riferimento_richiedente ?? '-' }}</td>
+        </tr>
+        <tr>
+            <td class="meta-label">Orari di consegna</td>
+            <td>{{ $ordine->orari_consegna ?? '-' }}</td>
         </tr>
         <tr>
             <td class="meta-label">Telefono</td>

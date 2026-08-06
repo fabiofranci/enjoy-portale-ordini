@@ -24,7 +24,7 @@ class Ordine extends Model
         'stato', 'data_ordine', 'inviato_da_nome', 'inviato_da_email',
         'riferimento_cliente', 'riferimento_richiedente', 'priorita',
         'indirizzo_destinazione', 'orari_consegna', 'note', 'extra_budget',
-        'totale_lordo', 'totale_netto', 'iva_totale', 'pdf_path',
+        'totale_lordo', 'totale_netto', 'iva_totale', 'pdf_path', 'xlsx_path',
         'email_stato', 'email_sent_at', 'email_recipients',
         'email_attempts', 'email_last_attempt_at', 'email_last_error',
         'odoo_lead_id', 'igroup_sent_at', 'odoo_synced_at',

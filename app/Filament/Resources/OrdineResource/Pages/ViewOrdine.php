@@ -22,6 +22,20 @@ class ViewOrdine extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('downloadPdf')
+                ->label('PDF')
+                ->icon('heroicon-o-document-arrow-down')
+                ->url(fn (): string => route('orders.documents.download', [
+                    'ordine' => $this->record,
+                    'format' => 'pdf',
+                ])),
+            Action::make('downloadExcel')
+                ->label('Excel')
+                ->icon('heroicon-o-table-cells')
+                ->url(fn (): string => route('orders.documents.download', [
+                    'ordine' => $this->record,
+                    'format' => 'xlsx',
+                ])),
             Action::make('resendEmail')
                 ->label('Reinvia email')
                 ->icon('heroicon-o-envelope')

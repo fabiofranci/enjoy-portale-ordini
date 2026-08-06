@@ -49,7 +49,7 @@ final class OrderQuoteRequestMail extends Mailable
     public function attachments(): array
     {
         return [
-            Attachment::fromStorageDisk('public', $this->pdfPath)
+            Attachment::fromStorageDisk('local', $this->pdfPath)
                 ->as($this->pdfFileName)
                 ->withMime('application/pdf'),
         ];

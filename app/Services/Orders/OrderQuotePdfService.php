@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 final class OrderQuotePdfService
 {
@@ -29,7 +30,13 @@ final class OrderQuotePdfService
         $path = $this->buildStoragePath($ordine, $fileName);
         $content = $this->renderPdf($ordine);
 
-        Storage::disk('public')->put($path, $content);
+        if (! Storage::disk('local')->put($path, $content)) {
+            throw new RuntimeException('Impossibile salvare il documento PDF.');
+        }
+
+        if (Storage::disk('public')->exists($path)) {
+            Storage::disk('public')->delete($path);
+        }
 
         $ordine->forceFill([
             'pdf_path' => $path,
@@ -72,13 +79,13 @@ final class OrderQuotePdfService
             ? Str::slug($reference)
             : 'ordine-'.$ordine->id;
 
-        return sprintf('richiesta-preventivo-ordine-%d-%s.pdf', $ordine->id, $suffix);
+        return sprintf('ordine-%d-%s.pdf', $ordine->id, $suffix);
     }
 
     private function buildStoragePath(Ordine $ordine, string $fileName): string
     {
         $datePath = $ordine->created_at?->format('Y/m') ?? now()->format('Y/m');
 
-        return sprintf('ordini/richieste-preventivo/%s/%s', $datePath, $fileName);
+        return sprintf('ordini/documenti/%s/%s', $datePath, $fileName);
     }
 }

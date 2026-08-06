@@ -30,6 +30,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use RuntimeException;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -55,6 +56,7 @@ final class CustomerOrderFlowTest extends TestCase
         config(['services.orders.administration_email' => null]);
         Mail::fake();
         Storage::fake('public');
+        Storage::fake('local');
 
         $this->cliente = Cliente::query()->create([
             'nome' => 'Cliente ordini',
@@ -144,7 +146,8 @@ final class CustomerOrderFlowTest extends TestCase
         $this->assertNull($item->prodotto_id);
         $this->assertSame('Consegna al piano terra', $ordine->note);
         $this->assertFalse(session()->has(CatalogCartService::SESSION_KEY));
-        Storage::disk('public')->assertExists((string) $ordine->pdf_path);
+        Storage::disk('local')->assertExists((string) $ordine->pdf_path);
+        Storage::disk('public')->assertMissing((string) $ordine->pdf_path);
         Mail::assertNothingSent();
     }
 
@@ -449,6 +452,87 @@ final class CustomerOrderFlowTest extends TestCase
 
         $migration->up();
         $this->assertTrue(Schema::hasColumn('ordini', 'email_attempts'));
+    }
+
+    public function test_documenti_privati_sono_scaricabili_solo_da_cliente_proprietario_e_admin(): void
+    {
+        $ordine = $this->submitPrice($this->catalogPrice('ICA-DOCUMENT', 10), 'DOCUMENT-1');
+
+        $pdfResponse = $this->actingAs($this->user)->get(route('orders.documents.download', [
+            'ordine' => $ordine,
+            'format' => 'pdf',
+        ]));
+        $pdfResponse
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+        $cacheControl = (string) $pdfResponse->headers->get('cache-control');
+        $this->assertStringContainsString('private', $cacheControl);
+        $this->assertStringContainsString('no-store', $cacheControl);
+        $this->assertStringStartsWith('%PDF-', $pdfResponse->getContent());
+
+        $xlsxResponse = $this->get(route('orders.documents.download', [
+            'ordine' => $ordine,
+            'format' => 'xlsx',
+        ]));
+        $xlsxResponse
+            ->assertOk()
+            ->assertHeader(
+                'content-type',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            );
+
+        $ordine->refresh();
+        Storage::disk('local')->assertExists((string) $ordine->xlsx_path);
+        Storage::disk('public')->assertMissing((string) $ordine->xlsx_path);
+        $spreadsheet = IOFactory::load(Storage::disk('local')->path((string) $ordine->xlsx_path));
+        $sheet = $spreadsheet->getActiveSheet();
+        $this->assertSame('Ordine cliente', $sheet->getCell('A1')->getValue());
+        $this->assertSame('Standard', $sheet->getCell('B6')->getValue());
+        $this->assertSame('ICA-DOCUMENT', $sheet->getCell('A18')->getValue());
+        $spreadsheet->disconnectWorksheets();
+
+        $otherClient = Cliente::query()->create([
+            'nome' => 'Cliente documenti non autorizzato',
+            'partita_iva' => '88888888888',
+        ]);
+        $otherUser = User::factory()->create(['cliente_id' => $otherClient->getKey()]);
+        $otherUser->assignRole(Role::query()->where('name', 'cliente')->firstOrFail());
+        $this->actingAs($otherUser)
+            ->get(route('orders.documents.download', ['ordine' => $ordine, 'format' => 'pdf']))
+            ->assertForbidden();
+
+        $admin = User::factory()->create();
+        $admin->assignRole(Role::query()->create(['name' => 'admin']));
+        $this->actingAs($admin)
+            ->get(route('orders.documents.download', ['ordine' => $ordine, 'format' => 'xlsx']))
+            ->assertOk();
+
+        auth()->logout();
+        $this->get(route('orders.documents.download', ['ordine' => $ordine, 'format' => 'pdf']))
+            ->assertForbidden();
+    }
+
+    public function test_migration_documenti_sposta_pdf_esistente_dal_disco_pubblico(): void
+    {
+        $ordine = Ordine::query()->create([
+            'user_id' => $this->user->getKey(),
+            'centro_costo_id' => $this->centroCosto->getKey(),
+            'stato' => Ordine::STATUS_NEW,
+            'riferimento_cliente' => 'PRIVATE-MIGRATION',
+            'totale_lordo' => 1,
+            'pdf_path' => 'ordini/legacy/ordine.pdf',
+        ]);
+        Storage::disk('public')->put((string) $ordine->pdf_path, 'legacy-pdf');
+        $migration = require database_path(
+            'migrations/2026_08_06_000003_store_order_documents_privately.php'
+        );
+
+        $migration->down();
+        $migration->up();
+
+        Storage::disk('public')->assertMissing((string) $ordine->pdf_path);
+        Storage::disk('local')->assertExists((string) $ordine->pdf_path);
+        $this->assertSame('legacy-pdf', Storage::disk('local')->get((string) $ordine->pdf_path));
     }
 
     public function test_numero_ordine_non_puo_essere_riutilizzato_e_storico_e_isolato(): void

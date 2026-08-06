@@ -36,6 +36,26 @@
                         <div class="text-lg font-semibold">
                             &euro; {{ number_format((float) $order->totale_lordo, 2, ',', '.') }} IVA inclusa
                         </div>
+                        <div class="flex items-center gap-2">
+                            <x-filament::button
+                                size="sm"
+                                color="gray"
+                                icon="heroicon-o-document-arrow-down"
+                                tag="a"
+                                :href="route('orders.documents.download', ['ordine' => $order, 'format' => 'pdf'])"
+                            >
+                                PDF
+                            </x-filament::button>
+                            <x-filament::button
+                                size="sm"
+                                color="gray"
+                                icon="heroicon-o-table-cells"
+                                tag="a"
+                                :href="route('orders.documents.download', ['ordine' => $order, 'format' => 'xlsx'])"
+                            >
+                                Excel
+                            </x-filament::button>
+                        </div>
                     </div>
 
                     <dl class="mb-5 grid gap-3 border-y border-gray-200 py-4 text-sm dark:border-white/10 sm:grid-cols-2">
