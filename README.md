@@ -49,12 +49,17 @@ si configura nell'ambiente:
 
 ```dotenv
 ORDER_ADMINISTRATION_EMAIL=ordini@enjoy-service.it
+ORDER_EXPORT_MAX_ROWS=1000
 ```
 
 Il destinatario amministrativo e obbligatorio: se manca, l'ordine resta valido
 ma il tentativo e registrato come `errore`. Se manca solo l'indirizzo del
 fornitore, l'email viene comunque inviata all'amministrazione ed e segnalata
 come `parziale`.
+
+Gli export PDF e XLSX dell'elenco ordini sono limitati dal valore
+`ORDER_EXPORT_MAX_ROWS`; quando il limite viene superato occorre restringere
+l'intervallo di date.
 
 ## About Laravel
 

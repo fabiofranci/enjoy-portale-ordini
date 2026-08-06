@@ -48,6 +48,7 @@ return [
 
     'orders' => [
         'administration_email' => env('ORDER_ADMINISTRATION_EMAIL'),
+        'export_max_rows' => (int) env('ORDER_EXPORT_MAX_ROWS', 1000),
     ],
 
 ];

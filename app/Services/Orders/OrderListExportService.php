@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Orders;
 
 use App\Models\Ordine;
+use App\Services\Orders\Exceptions\OrderExportLimitExceeded;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 use Illuminate\Database\Eloquent\Builder;
@@ -27,8 +28,14 @@ final class OrderListExportService
         ?string $from = null,
         ?string $to = null,
     ): array {
+        $limit = max(1, (int) config('services.orders.export_max_rows', 1000));
+
         /** @var Collection<int, Ordine> $orders */
-        $orders = (clone $query)->get();
+        $orders = (clone $query)->limit($limit + 1)->get();
+
+        if ($orders->count() > $limit) {
+            throw OrderExportLimitExceeded::forLimit($limit);
+        }
 
         return match (strtolower($format)) {
             'pdf' => $this->pdf($orders, $from, $to),

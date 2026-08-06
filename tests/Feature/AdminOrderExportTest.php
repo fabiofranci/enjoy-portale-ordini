@@ -123,6 +123,50 @@ final class AdminOrderExportTest extends TestCase
             ->assertCanNotSeeTableRecords([$fallBefore, $fallAfter]);
     }
 
+    public function test_export_accetta_un_dataset_vuoto(): void
+    {
+        config(['services.orders.export_max_rows' => 2]);
+
+        Livewire::actingAs($this->admin)
+            ->test(ListOrdini::class)
+            ->callAction('exportExcel')
+            ->assertFileDownloaded(
+                'ordini-20260806-153000.xlsx',
+                contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            );
+    }
+
+    public function test_export_accetta_esattamente_il_numero_massimo_di_ordini(): void
+    {
+        config(['services.orders.export_max_rows' => 2]);
+        $this->order('LIMIT-1', '2026-08-01 10:00:00');
+        $this->order('LIMIT-2', '2026-08-01 11:00:00');
+
+        Livewire::actingAs($this->admin)
+            ->test(ListOrdini::class)
+            ->callAction('exportPdf')
+            ->assertFileDownloaded('ordini-20260806-153000.pdf', contentType: 'application/pdf');
+    }
+
+    public function test_export_blocca_il_superamento_del_limite_con_un_messaggio_chiaro(): void
+    {
+        config(['services.orders.export_max_rows' => 2]);
+        $this->order('OVER-1', '2026-08-01 10:00:00');
+        $this->order('OVER-2', '2026-08-01 11:00:00');
+        $this->order('OVER-3', '2026-08-01 12:00:00');
+
+        $component = Livewire::actingAs($this->admin)
+            ->test(ListOrdini::class)
+            ->callAction('exportExcel')
+            ->assertNoFileDownloaded();
+
+        $this->assertSame(
+            'L export supera il limite di 2 ordini. Restringi l intervallo di date e riprova.',
+            data_get(session('filament.notifications'), '0.body'),
+        );
+        $component->assertNotified('Export non disponibile');
+    }
+
     private function order(string $reference, string $date, string $priority = Ordine::PRIORITY_STANDARD): Ordine
     {
         return Ordine::query()->create([
