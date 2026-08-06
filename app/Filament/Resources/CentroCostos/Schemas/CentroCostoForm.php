@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\CentroCostos\Schemas;
 
-use App\Models\Cliente;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Schema;
 
@@ -21,6 +21,10 @@ class CentroCostoForm
 
             TextInput::make('nome')->required()->label('Nome centro di costo'),
             TextInput::make('descrizione')->label('Descrizione'),
+            Textarea::make('indirizzo')
+                ->label('Indirizzo di destinazione')
+                ->rows(3)
+                ->columnSpanFull(),
             TextInput::make('budget_annuale')->label('Budget annuale')->numeric()->prefix('€'),
             TextInput::make('budget_mensile')->label('Budget mensile')->numeric()->prefix('€'),
         ]);

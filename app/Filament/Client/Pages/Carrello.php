@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Client\Pages;
 
+use App\Models\Ordine;
 use App\Models\User;
 use App\Services\Orders\CatalogCartService;
 use App\Services\Orders\OrderSubmissionService;
@@ -42,6 +43,16 @@ class Carrello extends Page
 
     public string $notes = '';
 
+    public string $priority = Ordine::PRIORITY_STANDARD;
+
+    public string $destinationAddress = '';
+
+    public string $requesterReference = '';
+
+    public string $deliveryHours = '';
+
+    public bool $destinationInitialized = false;
+
     public function mount(): void
     {
         $this->loadCart();
@@ -78,7 +89,19 @@ class Carrello extends Page
     public function clear(): void
     {
         $this->cartService()->clear();
-        $this->reset(['cart', 'totale', 'centroCostoNome', 'fornitoreCode', 'confirmationNumber', 'notes']);
+        $this->reset([
+            'cart',
+            'totale',
+            'centroCostoNome',
+            'fornitoreCode',
+            'confirmationNumber',
+            'notes',
+            'destinationAddress',
+            'requesterReference',
+            'deliveryHours',
+            'destinationInitialized',
+        ]);
+        $this->priority = Ordine::PRIORITY_STANDARD;
     }
 
     public static function getNavigationBadge(): ?string
@@ -102,10 +125,18 @@ class Carrello extends Page
     {
         $this->validate([
             'confirmationNumber' => ['required', 'string', 'max:50', 'not_regex:/[\r\n]/'],
+            'priority' => ['required', 'in:standard,urgente'],
+            'destinationAddress' => ['required', 'string', 'max:1000'],
+            'requesterReference' => ['nullable', 'string', 'max:255'],
+            'deliveryHours' => ['nullable', 'string', 'max:500'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ], [
             'confirmationNumber.required' => 'Inserisci il numero ordine cliente.',
             'confirmationNumber.max' => 'Il numero ordine cliente non puo superare 50 caratteri.',
+            'destinationAddress.required' => 'Inserisci l\'indirizzo di destinazione.',
+            'destinationAddress.max' => 'L\'indirizzo non puo superare 1000 caratteri.',
+            'requesterReference.max' => 'Il riferimento in loco non puo superare 255 caratteri.',
+            'deliveryHours.max' => 'Gli orari di consegna non possono superare 500 caratteri.',
             'notes.max' => 'Le note non possono superare 1000 caratteri.',
         ]);
 
@@ -117,6 +148,10 @@ class Carrello extends Page
                 $contents['items'],
                 $this->confirmationNumber,
                 $this->notes,
+                $this->priority,
+                $this->destinationAddress,
+                $this->requesterReference,
+                $this->deliveryHours,
             );
 
             $this->clear();
@@ -169,6 +204,11 @@ class Carrello extends Page
             $this->totale = $contents['totale'];
             $this->centroCostoNome = $contents['centro_costo_nome'];
             $this->fornitoreCode = $contents['fornitore_code'];
+
+            if (! $this->destinationInitialized) {
+                $this->destinationAddress = (string) ($contents['centro_costo_indirizzo'] ?? '');
+                $this->destinationInitialized = true;
+            }
         } catch (ValidationException $exception) {
             $this->cartService()->clear();
             $this->cart = [];

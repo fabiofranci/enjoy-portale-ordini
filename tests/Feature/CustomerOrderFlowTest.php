@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Filament\Client\Pages\Carrello;
 use App\Filament\Client\Pages\Ordini as CustomerOrders;
 use App\Filament\Client\Resources\Prodotti\Pages\ListProdotti;
+use App\Filament\Resources\OrdineResource\Pages\ViewOrdine;
 use App\Mail\OrderQuoteRequestMail;
 use App\Models\CentroCosto;
 use App\Models\Cliente;
@@ -17,10 +18,14 @@ use App\Models\Ordine;
 use App\Models\ReferenzaFornitore;
 use App\Models\User;
 use App\Services\Orders\CatalogCartService;
+use App\Services\Orders\OrderStatusService;
 use App\Services\Orders\OrderSubmissionService;
 use Filament\Facades\Filament;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
@@ -56,6 +61,7 @@ final class CustomerOrderFlowTest extends TestCase
         $this->centroCosto = CentroCosto::query()->create([
             'cliente_id' => $this->cliente->getKey(),
             'nome' => 'Sede principale',
+            'indirizzo' => 'Via Centro 10, Milano',
         ]);
         $this->supplier = Fornitore::query()->create([
             'code' => 'ICA',
@@ -92,7 +98,12 @@ final class CustomerOrderFlowTest extends TestCase
 
         Livewire::actingAs($this->user)
             ->test(Carrello::class)
+            ->assertSet('destinationAddress', 'Via Centro 10, Milano')
             ->set('confirmationNumber', 'PO-2026/001')
+            ->set('priority', Ordine::PRIORITY_URGENT)
+            ->set('destinationAddress', 'Via Consegna 20, Milano')
+            ->set('requesterReference', 'Mario Rossi')
+            ->set('deliveryHours', 'Lunedi-venerdi 08:00-12:00')
             ->set('notes', 'Consegna al piano terra')
             ->call('proceed');
 
@@ -105,7 +116,14 @@ final class CustomerOrderFlowTest extends TestCase
         $this->assertSame('12345678901', $ordine->cliente_partita_iva);
         $this->assertSame('Sede principale', $ordine->centro_costo_nome);
         $this->assertSame('ICA', $ordine->fornitore_code);
-        $this->assertSame('inviato', $ordine->stato);
+        $this->assertSame(Ordine::STATUS_NEW, $ordine->stato);
+        $this->assertNotNull($ordine->data_ordine);
+        $this->assertSame($this->user->name, $ordine->inviato_da_nome);
+        $this->assertSame($this->user->email, $ordine->inviato_da_email);
+        $this->assertSame(Ordine::PRIORITY_URGENT, $ordine->priorita);
+        $this->assertSame('Via Consegna 20, Milano', $ordine->indirizzo_destinazione);
+        $this->assertSame('Mario Rossi', $ordine->riferimento_richiedente);
+        $this->assertSame('Lunedi-venerdi 08:00-12:00', $ordine->orari_consegna);
         $this->assertSame('in_attesa', $ordine->email_stato);
         $this->assertSame([], $ordine->email_recipients);
         $this->assertSame('25.00', $ordine->totale_lordo);
@@ -165,6 +183,7 @@ final class CustomerOrderFlowTest extends TestCase
         $secondCenter = CentroCosto::query()->create([
             'cliente_id' => $this->cliente->getKey(),
             'nome' => 'Seconda sede',
+            'indirizzo' => 'Via Seconda 2, Milano',
         ]);
         $secondCenter->listini()->attach($this->listino->getKey());
         $cart = app(CatalogCartService::class);
@@ -173,6 +192,78 @@ final class CustomerOrderFlowTest extends TestCase
         $this->expectException(ValidationException::class);
 
         $cart->add($this->user, (int) $secondCenter->getKey(), (int) $price->getKey());
+    }
+
+    public function test_indirizzo_di_destinazione_e_obbligatorio_se_il_centro_non_lo_propone(): void
+    {
+        $this->centroCosto->update(['indirizzo' => null]);
+        $price = $this->catalogPrice('ICA-NO-ADDRESS', 5);
+        app(CatalogCartService::class)->add(
+            $this->user,
+            (int) $this->centroCosto->getKey(),
+            (int) $price->getKey(),
+        );
+        $this->useClientPanel();
+
+        Livewire::actingAs($this->user)
+            ->test(Carrello::class)
+            ->assertSet('destinationAddress', '')
+            ->set('confirmationNumber', 'NO-ADDRESS')
+            ->call('proceed')
+            ->assertHasErrors(['destinationAddress' => 'required']);
+
+        $this->assertDatabaseMissing('ordini', ['riferimento_cliente' => 'NO-ADDRESS']);
+    }
+
+    public function test_solo_un_amministratore_puo_segnare_un_ordine_come_evaso(): void
+    {
+        $ordine = $this->submitPrice($this->catalogPrice('ICA-STATUS', 5), 'STATUS-1');
+        $service = app(OrderStatusService::class);
+
+        try {
+            $service->markAsFulfilled($ordine, $this->user);
+            $this->fail('Un cliente non deve poter evadere un ordine.');
+        } catch (AuthorizationException) {
+            $this->assertSame(Ordine::STATUS_NEW, $ordine->fresh()->stato);
+        }
+
+        $admin = User::factory()->create();
+        $admin->assignRole(Role::query()->create(['name' => 'admin']));
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+
+        Livewire::actingAs($admin)
+            ->test(ViewOrdine::class, ['record' => $ordine->getRouteKey()])
+            ->callAction('markAsFulfilled')
+            ->assertHasNoActionErrors();
+
+        $this->assertSame(Ordine::STATUS_FULFILLED, $ordine->fresh()->stato);
+    }
+
+    public function test_migration_ordini_supporta_rollback_e_mappa_lo_stato_esistente(): void
+    {
+        $ordine = Ordine::query()->create([
+            'user_id' => $this->user->getKey(),
+            'centro_costo_id' => $this->centroCosto->getKey(),
+            'stato' => Ordine::STATUS_NEW,
+            'riferimento_cliente' => 'MIGRATION-STATUS',
+            'totale_lordo' => 1,
+        ]);
+        $migration = require database_path(
+            'migrations/2026_08_06_000001_extend_order_details_and_statuses.php'
+        );
+
+        $migration->down();
+
+        $this->assertFalse(Schema::hasColumn('ordini', 'data_ordine'));
+        $this->assertSame('inviato', DB::table('ordini')->where('id', $ordine->id)->value('stato'));
+
+        $migration->up();
+
+        $mapped = Ordine::query()->findOrFail($ordine->id);
+        $this->assertSame(Ordine::STATUS_NEW, $mapped->stato);
+        $this->assertSame($this->user->name, $mapped->inviato_da_nome);
+        $this->assertSame($this->user->email, $mapped->inviato_da_email);
+        $this->assertNotNull($mapped->data_ordine);
     }
 
     public function test_carrello_non_piu_valido_viene_svuotato_con_un_avviso(): void

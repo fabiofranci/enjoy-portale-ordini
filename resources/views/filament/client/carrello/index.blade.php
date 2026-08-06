@@ -177,6 +177,85 @@
                                 @enderror
                             </div>
 
+                            <fieldset>
+                                <legend class="mb-2 block text-sm font-medium text-gray-950 dark:text-white">Priorit&agrave;</legend>
+                                <div class="grid grid-cols-2 overflow-hidden rounded-lg border border-gray-200 dark:border-white/10">
+                                    <label @class([
+                                        'cursor-pointer px-3 py-2 text-center text-sm font-medium transition',
+                                        'bg-primary-600 text-white' => $priority === 'standard',
+                                        'bg-white text-gray-700 dark:bg-white/5 dark:text-gray-300' => $priority !== 'standard',
+                                    ])>
+                                        <input class="sr-only" type="radio" value="standard" wire:model.live="priority">
+                                        Standard
+                                    </label>
+                                    <label @class([
+                                        'cursor-pointer border-l border-gray-200 px-3 py-2 text-center text-sm font-medium transition dark:border-white/10',
+                                        'bg-danger-600 text-white' => $priority === 'urgente',
+                                        'bg-white text-gray-700 dark:bg-white/5 dark:text-gray-300' => $priority !== 'urgente',
+                                    ])>
+                                        <input class="sr-only" type="radio" value="urgente" wire:model.live="priority">
+                                        Urgente
+                                    </label>
+                                </div>
+                                @error('priority')
+                                    <p class="mt-2 text-sm text-danger-600">{{ $message }}</p>
+                                @enderror
+                            </fieldset>
+
+                            <div>
+                                <label for="destination-address" class="mb-2 block text-sm font-medium text-gray-950 dark:text-white">
+                                    Indirizzo di destinazione <span class="text-danger-600">*</span>
+                                </label>
+                                <x-filament::input.wrapper :valid="! $errors->has('destinationAddress')">
+                                    <textarea
+                                        id="destination-address"
+                                        wire:model="destinationAddress"
+                                        rows="3"
+                                        maxlength="1000"
+                                        class="fi-input block w-full resize-y border-none bg-transparent px-3 py-2 text-base text-gray-950 outline-none transition duration-75 placeholder:text-gray-400 focus:ring-0 disabled:text-gray-500 dark:text-white dark:placeholder:text-gray-500 sm:text-sm"
+                                    ></textarea>
+                                </x-filament::input.wrapper>
+                                @error('destinationAddress')
+                                    <p class="mt-2 text-sm text-danger-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <div>
+                                <label for="requester-reference" class="mb-2 block text-sm font-medium text-gray-950 dark:text-white">Riferimento in loco / richiedente</label>
+                                <x-filament::input.wrapper
+                                    prefix-icon="heroicon-o-user"
+                                    :valid="! $errors->has('requesterReference')"
+                                >
+                                    <x-filament::input
+                                        id="requester-reference"
+                                        type="text"
+                                        wire:model="requesterReference"
+                                        maxlength="255"
+                                    />
+                                </x-filament::input.wrapper>
+                                @error('requesterReference')
+                                    <p class="mt-2 text-sm text-danger-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <div>
+                                <label for="delivery-hours" class="mb-2 block text-sm font-medium text-gray-950 dark:text-white">Orari di consegna</label>
+                                <x-filament::input.wrapper
+                                    prefix-icon="heroicon-o-clock"
+                                    :valid="! $errors->has('deliveryHours')"
+                                >
+                                    <x-filament::input
+                                        id="delivery-hours"
+                                        type="text"
+                                        wire:model="deliveryHours"
+                                        maxlength="500"
+                                    />
+                                </x-filament::input.wrapper>
+                                @error('deliveryHours')
+                                    <p class="mt-2 text-sm text-danger-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+
                             <div>
                                 <label for="order-notes" class="mb-2 block text-sm font-medium text-gray-950 dark:text-white">Note</label>
                                 <x-filament::input.wrapper :valid="! $errors->has('notes')">

@@ -34,6 +34,10 @@ final class OrderSubmissionService
         array $cartItems,
         string $customerReference,
         ?string $notes = null,
+        string $priority = Ordine::PRIORITY_STANDARD,
+        ?string $destinationAddress = null,
+        ?string $requesterReference = null,
+        ?string $deliveryHours = null,
     ): Ordine {
         $customerReference = $this->normalizeReference($customerReference);
         $notes = $this->normalizeNotes($notes);
@@ -42,6 +46,23 @@ final class OrderSubmissionService
             $centroCostoId,
             $cartItems,
         );
+        $priority = $this->normalizePriority($priority);
+        $destinationAddress = $this->normalizeDestinationAddress(
+            $destinationAddress ?? $centroCosto->indirizzo,
+        );
+        $requesterReference = $this->normalizeOptionalText(
+            $requesterReference,
+            255,
+            'Il riferimento in loco non puo superare 255 caratteri.',
+            'requester_reference',
+        );
+        $deliveryHours = $this->normalizeOptionalText(
+            $deliveryHours,
+            500,
+            'Gli orari di consegna non possono superare 500 caratteri.',
+            'delivery_hours',
+        );
+        $orderDate = now();
 
         try {
             $ordine = DB::transaction(function () use (
@@ -52,6 +73,11 @@ final class OrderSubmissionService
                 $quantities,
                 $customerReference,
                 $notes,
+                $priority,
+                $destinationAddress,
+                $requesterReference,
+                $deliveryHours,
+                $orderDate,
             ): Ordine {
                 if (Ordine::query()
                     ->where('user_id', $user->getKey())
@@ -71,8 +97,15 @@ final class OrderSubmissionService
                     'cliente_partita_iva' => $user->cliente?->partita_iva,
                     'centro_costo_nome' => $centroCosto->nome,
                     'fornitore_code' => $supplier->code,
-                    'stato' => 'inviato',
+                    'stato' => Ordine::STATUS_NEW,
+                    'data_ordine' => $orderDate,
+                    'inviato_da_nome' => $user->name,
+                    'inviato_da_email' => $user->email,
                     'riferimento_cliente' => $customerReference,
+                    'riferimento_richiedente' => $requesterReference,
+                    'priorita' => $priority,
+                    'indirizzo_destinazione' => $destinationAddress,
+                    'orari_consegna' => $deliveryHours,
                     'note' => $notes,
                     'extra_budget' => false,
                     'totale_lordo' => 0,
@@ -231,5 +264,46 @@ final class OrderSubmissionService
         }
 
         return $notes !== '' ? $notes : null;
+    }
+
+    private function normalizePriority(string $priority): string
+    {
+        $priority = strtolower(trim($priority));
+
+        if (! in_array($priority, [Ordine::PRIORITY_STANDARD, Ordine::PRIORITY_URGENT], true)) {
+            throw ValidationException::withMessages([
+                'priority' => 'Seleziona una priorita valida.',
+            ]);
+        }
+
+        return $priority;
+    }
+
+    private function normalizeDestinationAddress(?string $address): string
+    {
+        $address = trim((string) $address);
+
+        if ($address === '' || mb_strlen($address) > 1000) {
+            throw ValidationException::withMessages([
+                'destination_address' => 'Inserisci un indirizzo di destinazione valido, massimo 1000 caratteri.',
+            ]);
+        }
+
+        return $address;
+    }
+
+    private function normalizeOptionalText(
+        ?string $value,
+        int $maxLength,
+        string $message,
+        string $field,
+    ): ?string {
+        $value = trim((string) $value);
+
+        if (mb_strlen($value) > $maxLength) {
+            throw ValidationException::withMessages([$field => $message]);
+        }
+
+        return $value !== '' ? $value : null;
     }
 }

@@ -8,12 +8,22 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Ordine extends Model
 {
+    public const STATUS_NEW = 'nuovo';
+
+    public const STATUS_FULFILLED = 'evaso';
+
+    public const PRIORITY_STANDARD = 'standard';
+
+    public const PRIORITY_URGENT = 'urgente';
+
     protected $table = 'ordini';
 
     protected $fillable = [
         'user_id', 'centro_costo_id', 'fornitore_id',
         'cliente_nome', 'cliente_partita_iva', 'centro_costo_nome', 'fornitore_code',
-        'stato', 'riferimento_cliente', 'note', 'extra_budget',
+        'stato', 'data_ordine', 'inviato_da_nome', 'inviato_da_email',
+        'riferimento_cliente', 'riferimento_richiedente', 'priorita',
+        'indirizzo_destinazione', 'orari_consegna', 'note', 'extra_budget',
         'totale_lordo', 'totale_netto', 'iva_totale', 'pdf_path',
         'email_stato', 'email_sent_at', 'email_recipients',
         'odoo_lead_id', 'igroup_sent_at', 'odoo_synced_at',
@@ -21,6 +31,7 @@ class Ordine extends Model
 
     protected $casts = [
         'extra_budget' => 'boolean',
+        'data_ordine' => 'datetime',
         'totale_lordo' => 'decimal:2',
         'totale_netto' => 'decimal:2',
         'iva_totale' => 'decimal:2',
@@ -39,6 +50,30 @@ class Ordine extends Model
     public function isBozza(): bool
     {
         return $this->stato === 'bozza';
+    }
+
+    public function isEvaso(): bool
+    {
+        return $this->stato === self::STATUS_FULFILLED;
+    }
+
+    public function statoLabel(): string
+    {
+        return match ($this->stato) {
+            self::STATUS_NEW => 'Nuovo',
+            self::STATUS_FULFILLED => 'Evaso',
+            'bozza' => 'Bozza',
+            'inviato' => 'Inviato',
+            'in_attesa_approvazione' => 'In attesa approvazione',
+            'rifiutato' => 'Rifiutato',
+            'approvato' => 'Approvato',
+            default => ucfirst(str_replace('_', ' ', (string) $this->stato)),
+        };
+    }
+
+    public function prioritaLabel(): string
+    {
+        return $this->priorita === self::PRIORITY_URGENT ? 'Urgente' : 'Standard';
     }
 
     public function ricalcolaTotali(): void

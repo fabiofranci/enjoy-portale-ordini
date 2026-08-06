@@ -123,6 +123,7 @@ final class CatalogCartService
      * @return array{
      *     centro_costo_id:int,
      *     centro_costo_nome:string,
+     *     centro_costo_indirizzo:?string,
      *     fornitore_id:int,
      *     fornitore_code:string,
      *     items:array<string, array<string, int|float|string|null>>,
@@ -195,6 +196,7 @@ final class CatalogCartService
         return [
             'centro_costo_id' => (int) $centroCosto->getKey(),
             'centro_costo_nome' => (string) $centroCosto->nome,
+            'centro_costo_indirizzo' => $centroCosto->indirizzo,
             'fornitore_id' => (int) $supplier->getKey(),
             'fornitore_code' => (string) $supplier->code,
             'items' => $items,
@@ -231,7 +233,7 @@ final class CatalogCartService
     }
 
     /**
-     * @param array<string, mixed> $cart
+     * @param  array<string, mixed>  $cart
      * @return array<string, array<string, mixed>>
      */
     private function itemRows(array $cart): array

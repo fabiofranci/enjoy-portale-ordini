@@ -17,6 +17,7 @@ class CentroCosto extends Model
         'cliente_id',
         'nome',
         'descrizione',
+        'indirizzo',
         'budget_annuale',
         'budget_mensile',
     ];

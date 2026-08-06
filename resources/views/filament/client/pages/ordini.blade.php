@@ -15,20 +15,47 @@
                         Ordine {{ $order->riferimento_cliente }}
                     </x-slot>
                     <x-slot name="description">
-                        {{ $order->created_at->format('d/m/Y H:i') }}
+                        {{ ($order->data_ordine ?? $order->created_at)->format('d/m/Y H:i') }}
                         &middot; {{ $order->centro_costo_nome ?? '-' }}
                         &middot; {{ $order->fornitore_code ?? '-' }}
                     </x-slot>
 
                     <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-                        <div class="text-sm">
-                            <span class="text-gray-500 dark:text-gray-400">Stato:</span>
-                            <strong>{{ $order->stato === 'inviato' ? 'Registrato' : ucfirst($order->stato) }}</strong>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <x-filament::badge :color="match ($order->stato) {
+                                \App\Models\Ordine::STATUS_NEW => 'danger',
+                                \App\Models\Ordine::STATUS_FULFILLED => 'success',
+                                default => 'gray',
+                            }">
+                                {{ $order->statoLabel() }}
+                            </x-filament::badge>
+                            <x-filament::badge :color="$order->priorita === \App\Models\Ordine::PRIORITY_URGENT ? 'danger' : 'gray'">
+                                {{ $order->prioritaLabel() }}
+                            </x-filament::badge>
                         </div>
                         <div class="text-lg font-semibold">
                             &euro; {{ number_format((float) $order->totale_lordo, 2, ',', '.') }} IVA inclusa
                         </div>
                     </div>
+
+                    <dl class="mb-5 grid gap-3 border-y border-gray-200 py-4 text-sm dark:border-white/10 sm:grid-cols-2">
+                        <div>
+                            <dt class="text-gray-500 dark:text-gray-400">Destinazione</dt>
+                            <dd class="font-medium text-gray-950 dark:text-white">{{ $order->indirizzo_destinazione }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-500 dark:text-gray-400">Riferimento in loco</dt>
+                            <dd class="font-medium text-gray-950 dark:text-white">{{ $order->riferimento_richiedente ?: '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-500 dark:text-gray-400">Orari di consegna</dt>
+                            <dd class="font-medium text-gray-950 dark:text-white">{{ $order->orari_consegna ?: '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-500 dark:text-gray-400">Inviato da</dt>
+                            <dd class="font-medium text-gray-950 dark:text-white">{{ $order->inviato_da_nome }}</dd>
+                        </div>
+                    </dl>
 
                     <div class="overflow-x-auto">
                         <table class="w-full min-w-[620px] text-sm">

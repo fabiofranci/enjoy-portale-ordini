@@ -53,13 +53,19 @@ class OrdineResource extends Resource
                     ->sortable(),
 
                 BadgeColumn::make('stato')
-                    ->colors([
-                        'gray' => 'bozza',
-                        'primary' => 'inviato',
-                        'warning' => 'in_attesa_approvazione',
-                        'danger' => 'rifiutato',
-                        'success' => 'approvato',
-                    ]),
+                    ->formatStateUsing(fn (string $state, Ordine $record): string => $record->statoLabel())
+                    ->color(fn (string $state): string => match ($state) {
+                        Ordine::STATUS_NEW, 'rifiutato' => 'danger',
+                        Ordine::STATUS_FULFILLED, 'approvato' => 'success',
+                        'in_attesa_approvazione' => 'warning',
+                        'inviato' => 'primary',
+                        default => 'gray',
+                    }),
+
+                BadgeColumn::make('priorita')
+                    ->label('Priorita')
+                    ->formatStateUsing(fn (string $state, Ordine $record): string => $record->prioritaLabel())
+                    ->color(fn (string $state): string => $state === Ordine::PRIORITY_URGENT ? 'danger' : 'gray'),
 
                 BadgeColumn::make('email_stato')
                     ->label('Email')
@@ -75,8 +81,8 @@ class OrdineResource extends Resource
                     ->money('EUR')
                     ->sortable(),
 
-                TextColumn::make('created_at')
-                    ->label('Creato il')
+                TextColumn::make('data_ordine')
+                    ->label('Data ordine')
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),
             ])
@@ -85,6 +91,8 @@ class OrdineResource extends Resource
                     ->options([
                         'bozza' => 'Bozza',
                         'inviato' => 'Inviato',
+                        Ordine::STATUS_NEW => 'Nuovo',
+                        Ordine::STATUS_FULFILLED => 'Evaso',
                         'in_attesa_approvazione' => 'In attesa approvazione',
                         'rifiutato' => 'Rifiutato',
                         'approvato' => 'Approvato',
