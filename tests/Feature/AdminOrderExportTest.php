@@ -44,10 +44,10 @@ final class AdminOrderExportTest extends TestCase
 
     public function test_filtro_data_inclusivo_ed_export_usano_solo_gli_ordini_visibili(): void
     {
-        $before = $this->order('PRIMA', '2026-07-31 23:59:59');
-        $from = $this->order('=DAL', '2026-08-01 00:00:00');
-        $to = $this->order('AL', '2026-08-03 23:59:59', Ordine::PRIORITY_URGENT);
-        $after = $this->order('DOPO', '2026-08-04 00:00:00');
+        $before = $this->order('PRIMA', '2026-07-31 21:59:59');
+        $from = $this->order('=DAL', '2026-07-31 22:00:00');
+        $to = $this->order('AL', '2026-08-03 21:59:59', Ordine::PRIORITY_URGENT);
+        $after = $this->order('DOPO', '2026-08-03 22:00:00');
 
         $component = Livewire::actingAs($this->admin)
             ->test(ListOrdini::class)
@@ -99,6 +99,28 @@ final class AdminOrderExportTest extends TestCase
         $this->assertStringStartsWith('%PDF-', $pdfContent);
         $this->assertSame([], Storage::disk('local')->allFiles());
         $this->assertSame([], Storage::disk('public')->allFiles());
+    }
+
+    public function test_filtro_data_rispetta_i_cambi_dst_italiani(): void
+    {
+        $springBefore = $this->order('SPRING-BEFORE', '2026-03-28 22:59:59');
+        $springStart = $this->order('SPRING-START', '2026-03-28 23:00:00');
+        $springEnd = $this->order('SPRING-END', '2026-03-29 21:59:59');
+        $springAfter = $this->order('SPRING-AFTER', '2026-03-29 22:00:00');
+        $fallBefore = $this->order('FALL-BEFORE', '2026-10-24 21:59:59');
+        $fallStart = $this->order('FALL-START', '2026-10-24 22:00:00');
+        $fallEnd = $this->order('FALL-END', '2026-10-25 22:59:59');
+        $fallAfter = $this->order('FALL-AFTER', '2026-10-25 23:00:00');
+
+        $component = Livewire::actingAs($this->admin)->test(ListOrdini::class);
+        $component
+            ->filterTable('data_ordine', ['da' => '2026-03-29', 'a' => '2026-03-29'])
+            ->assertCanSeeTableRecords([$springStart, $springEnd])
+            ->assertCanNotSeeTableRecords([$springBefore, $springAfter]);
+        $component
+            ->filterTable('data_ordine', ['da' => '2026-10-25', 'a' => '2026-10-25'])
+            ->assertCanSeeTableRecords([$fallStart, $fallEnd])
+            ->assertCanNotSeeTableRecords([$fallBefore, $fallAfter]);
     }
 
     private function order(string $reference, string $date, string $priority = Ordine::PRIORITY_STANDARD): Ordine

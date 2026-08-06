@@ -6,7 +6,7 @@ use App\Filament\Resources\OrdineResource\Pages;
 use App\Filament\Resources\OrdineResource\RelationManagers\ItemsRelationManager;
 use App\Models\Ordine;
 use BackedEnum;
-use Carbon\Carbon;
+use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Resources\Resource;
@@ -21,6 +21,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class OrdineResource extends Resource
 {
+    private const ORDER_TIMEZONE = 'Europe/Rome';
+
     protected static ?string $model = Ordine::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShoppingBag;
@@ -111,22 +113,30 @@ class OrdineResource extends Resource
                     ->query(fn (Builder $query, array $data): Builder => $query
                         ->when(
                             $data['da'] ?? null,
-                            fn (Builder $query, string $date): Builder => $query->whereDate('data_ordine', '>=', $date),
+                            fn (Builder $query, string $date): Builder => $query->where(
+                                'data_ordine',
+                                '>=',
+                                self::localDayStartInUtc($date),
+                            ),
                         )
                         ->when(
                             $data['a'] ?? null,
-                            fn (Builder $query, string $date): Builder => $query->whereDate('data_ordine', '<=', $date),
+                            fn (Builder $query, string $date): Builder => $query->where(
+                                'data_ordine',
+                                '<',
+                                self::localNextDayStartInUtc($date),
+                            ),
                         ))
                     ->indicateUsing(function (array $data): array {
                         $indicators = [];
 
                         if ($data['da'] ?? null) {
-                            $indicators[] = Indicator::make('Dal '.Carbon::parse($data['da'])->format('d/m/Y'))
+                            $indicators[] = Indicator::make('Dal '.CarbonImmutable::parse($data['da'])->format('d/m/Y'))
                                 ->removeField('da');
                         }
 
                         if ($data['a'] ?? null) {
-                            $indicators[] = Indicator::make('Al '.Carbon::parse($data['a'])->format('d/m/Y'))
+                            $indicators[] = Indicator::make('Al '.CarbonImmutable::parse($data['a'])->format('d/m/Y'))
                                 ->removeField('a');
                         }
 
@@ -155,5 +165,20 @@ class OrdineResource extends Resource
             'index' => Pages\ListOrdini::route('/'),
             'view' => Pages\ViewOrdine::route('/{record}'),
         ];
+    }
+
+    private static function localDayStartInUtc(string $date): CarbonImmutable
+    {
+        return CarbonImmutable::parse($date, self::ORDER_TIMEZONE)
+            ->startOfDay()
+            ->utc();
+    }
+
+    private static function localNextDayStartInUtc(string $date): CarbonImmutable
+    {
+        return CarbonImmutable::parse($date, self::ORDER_TIMEZONE)
+            ->startOfDay()
+            ->addDay()
+            ->utc();
     }
 }

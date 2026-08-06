@@ -16,7 +16,7 @@ return new class extends Migration
 
         Schema::table('ordini', function (Blueprint $table): void {
             $table->string('stato', 32)->default('nuovo')->change();
-            $table->timestamp('data_ordine')->nullable()->after('stato');
+            $table->timestamp('data_ordine')->nullable()->index()->after('stato');
             $table->string('inviato_da_nome')->nullable()->after('data_ordine');
             $table->string('inviato_da_email')->nullable()->after('inviato_da_nome');
             $table->string('riferimento_richiedente')->nullable()->after('riferimento_cliente');
@@ -30,6 +30,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('ordini', function (Blueprint $table): void {
+            $table->dropIndex(['data_ordine']);
             $table->dropColumn([
                 'data_ordine',
                 'inviato_da_nome',

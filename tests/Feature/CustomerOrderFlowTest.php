@@ -259,8 +259,11 @@ final class CustomerOrderFlowTest extends TestCase
         $migration->down();
 
         $this->assertFalse(Schema::hasColumn('ordini', 'data_ordine'));
+        $this->assertFalse(Schema::hasIndex('ordini', ['data_ordine']));
 
         $migration->up();
+
+        $this->assertTrue(Schema::hasIndex('ordini', ['data_ordine']));
 
         $ordine = Ordine::query()->create([
             'user_id' => $this->user->getKey(),
