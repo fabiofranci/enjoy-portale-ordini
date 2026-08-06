@@ -6,13 +6,18 @@ use App\Filament\Resources\OrdineResource\Pages;
 use App\Filament\Resources\OrdineResource\RelationManagers\ItemsRelationManager;
 use App\Models\Ordine;
 use BackedEnum;
+use Carbon\Carbon;
 use Filament\Actions\Action;
+use Filament\Forms\Components\DatePicker;
 use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\Indicator;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class OrdineResource extends Resource
 {
@@ -97,6 +102,36 @@ class OrdineResource extends Resource
                         'rifiutato' => 'Rifiutato',
                         'approvato' => 'Approvato',
                     ]),
+                Filter::make('data_ordine')
+                    ->label('Intervallo data ordine')
+                    ->schema([
+                        DatePicker::make('da')->label('Da'),
+                        DatePicker::make('a')->label('A'),
+                    ])
+                    ->query(fn (Builder $query, array $data): Builder => $query
+                        ->when(
+                            $data['da'] ?? null,
+                            fn (Builder $query, string $date): Builder => $query->whereDate('data_ordine', '>=', $date),
+                        )
+                        ->when(
+                            $data['a'] ?? null,
+                            fn (Builder $query, string $date): Builder => $query->whereDate('data_ordine', '<=', $date),
+                        ))
+                    ->indicateUsing(function (array $data): array {
+                        $indicators = [];
+
+                        if ($data['da'] ?? null) {
+                            $indicators[] = Indicator::make('Dal '.Carbon::parse($data['da'])->format('d/m/Y'))
+                                ->removeField('da');
+                        }
+
+                        if ($data['a'] ?? null) {
+                            $indicators[] = Indicator::make('Al '.Carbon::parse($data['a'])->format('d/m/Y'))
+                                ->removeField('a');
+                        }
+
+                        return $indicators;
+                    }),
             ])
             ->actions([
                 Action::make('view')
